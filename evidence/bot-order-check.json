@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-29T20:03:38.495Z",
+  "owner": "0x78fD47fb67a59E0b535b8a8D69D3eB3d7538584E",
+  "bot": "0x65A4e65092f845477da76EB42Fea71bC9a31F504",
+  "pool": "0x4181dd08E73BbCdd1Ba3E615A18f6abD941b94C0",
+  "price": "78041000000000000000000",
+  "quantity": "13000",
+  "orderId": "8116567392432211472047",
+  "placeTx": "0x149b9ae7fda67090126fa50392b5ba410fd0642a30123baaa7c6d06e2b60178a",
+  "cancelTx": "0xcaa653cae6c84daa9799ec150a5901649f76fbababbf3515981606f9b118456f",
+  "lockedAfter": "0",
+  "result": "passed"
+}

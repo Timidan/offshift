@@ -1,0 +1,52 @@
+{
+  "session": {
+    "id": 1,
+    "owner": "0x78fD47fb67a59E0b535b8a8D69D3eB3d7538584E",
+    "bot": "0x65A4e65092f845477da76EB42Fea71bC9a31F504",
+    "market": "BTC",
+    "notional": "20",
+    "ends_at": 1793304747690,
+    "status": "done",
+    "reason": null,
+    "blocked": null,
+    "created_at": 1793304693632
+  },
+  "events": [
+    {
+      "id": 1,
+      "session_id": 1,
+      "at": 1793304709483,
+      "kind": "order",
+      "tx": "0x0edfb3d5fed4b2bbeb4777587cb923e851241a06e9a8189548e50e044b2a05ed",
+      "side": "sell",
+      "quantity": "24000",
+      "price": "79827300000000000000000",
+      "position": "-24000",
+      "note": null
+    },
+    {
+      "id": 2,
+      "session_id": 1,
+      "at": 1793304794423,
+      "kind": "order",
+      "tx": "0xed86f0bd19ee1ab2e33e1cff7d18275db885f5a3e91191a48b597fb23be24aa9",
+      "side": "buy",
+      "quantity": "24000",
+      "price": "80732000000000000000000",
+      "position": "0",
+      "note": null
+    },
+    {
+      "id": 3,
+      "session_id": 1,
+      "at": 1793304856883,
+      "kind": "done",
+      "tx": null,
+      "side": null,
+      "quantity": null,
+      "price": null,
+      "position": "0",
+      "note": null
+    }
+  ]
+}
