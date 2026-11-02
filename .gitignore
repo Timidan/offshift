@@ -3,3 +3,5 @@ node_modules/
 *.sqlite
 *.stdout
 *.stderr
+backup/
+*.sqlite-*

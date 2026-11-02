@@ -9,8 +9,8 @@
     "@somnia-chain/markets-sdk": "0.32.1"
   },
   "scripts": {
-    "worker": "node --env-file=.env src/worker.mjs",
-    "cli": "node --env-file=.env src/cli.mjs",
-    "test": "node --test src/*.test.mjs"
+    "cli": "node --env-file=.env --no-warnings src/cli.mjs",
+    "test": "node --test src/*.test.mjs",
+    "start": "node --env-file=.env --no-warnings src/web.mjs"
   }
 }
