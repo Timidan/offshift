@@ -103,8 +103,11 @@ async function refreshBoard() {
     }
   });
   await step('board refresh', async () => {
-    console.log(`board: ${await ingest(exchange.client, BTC.poolAddress)} new closes`);
-    tally = store.db.prepare('SELECT COUNT(*) AS closes, COUNT(DISTINCT account) AS traders FROM closes').get();
+    try {
+      console.log(`board: ${await ingest(exchange.client, BTC.poolAddress)} new closes`);
+    } finally { // new closes may be in even when an older stretch failed
+      tally = store.db.prepare('SELECT COUNT(*) AS closes, COUNT(DISTINCT account) AS traders FROM closes').get();
+    }
   });
   await step('open positions', readOpen);
   await step('markets', readPairs);
