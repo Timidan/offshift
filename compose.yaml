@@ -1,0 +1,18 @@
+services:
+  offshift:
+    build: .
+    env_file: .env
+    environment:
+      OFFSHIFT_DB: /data/offshift.sqlite
+    volumes:
+      - offshift_data:/data
+    restart: unless-stopped
+    networks:
+      - public_proxy
+
+volumes:
+  offshift_data:
+
+networks:
+  public_proxy:
+    external: true
