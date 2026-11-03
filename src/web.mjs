@@ -3,7 +3,7 @@
 // Starting or ending a shift needs the bot's secret, which only the browser that created the bot
 // holds (localStorage); every shift page is public and read-only without it.
 import { createServer } from 'node:http';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { getAddress, isAddress, formatUnits, formatEther } from 'viem';
 import { PLACE_ORDER_FOR_SELECTOR } from '@somnia-chain/markets-sdk';
 import * as store from './store.mjs';
@@ -116,11 +116,17 @@ async function refreshBoard() {
 }
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+// dreamDEX's own token icons, shown before each symbol. 1000PEPE uses pepe.svg.
+const tokens = new Map(readdirSync(new URL('./tokens/', import.meta.url)).map((f) => [f, readFileSync(new URL(`./tokens/${f}`, import.meta.url))]));
+const tok = (sym) => {
+  const file = `${String(sym).toLowerCase().replace(/^\d+/, '')}.svg`;
+  return `<span class="tok">${tokens.has(file) ? `<img src="/tokens/${file}" alt="" width="16" height="16">` : ''}${esc(sym)}</span>`;
+};
 const js = (v) => JSON.stringify(v).replace(/</g, '\\u003c'); // safe inside an inline script
 const short = (a) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 const usd = (n) => `${n < 0 ? '−' : n > 0 ? '+' : ''}${Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 })}`;
 const btc = (units) => formatUnits(BigInt(units), BTC.baseDecimals);
-const held = (size) => (BigInt(size) === 0n ? 'Flat' : `${BigInt(size) > 0n ? 'Long' : 'Short'} ${btc(BigInt(size) < 0n ? -BigInt(size) : size)} BTC`);
+const held = (size, html) => (BigInt(size) === 0n ? 'Flat' : `${BigInt(size) > 0n ? 'Long' : 'Short'} ${btc(BigInt(size) < 0n ? -BigInt(size) : size)} ${html ? tok('BTC') : 'BTC'}`);
 const tone = (n) => (n > 0 ? 'up' : n < 0 ? 'down' : '');
 const pct = (n) => `${n.toFixed(2)}%`;
 const POOL_BTC = BTC.poolAddress.toLowerCase();
@@ -151,15 +157,21 @@ function pixels(address) {
 }
 const who = (a) => `<span class="who">${pixels(a)}<span title="${esc(a)}">${esc(short(a))}</span></span>`;
 
-// Cumulative realized PnL, one point per close (at most 64).
-function curve(pnls, w, h) {
+// Cumulative realized PnL, one point per close (at most 64 kept), spaced by time when the close times
+// are given. A faint line marks zero once the total has been below it.
+function curve(pnls, w, h, times) {
   let sum = 0;
   const all = pnls.map((p) => (sum += p));
   const step = Math.ceil(all.length / 64);
-  const pts = [0, ...all.filter((_, i) => i % step === 0 || i === all.length - 1)];
+  const keep = (_, i) => i % step === 0 || i === all.length - 1;
+  const pts = [0, ...all.filter(keep)], at = times && [times[0], ...times.filter(keep)];
   const lo = Math.min(...pts), span = Math.max(...pts) - lo || 1;
-  const line = pts.map((v, i) => `${((i / (pts.length - 1)) * w).toFixed(1)},${(h - 2 - ((v - lo) / span) * (h - 4)).toFixed(1)}`).join(' ');
-  return `<svg class="curve ${tone(sum)}" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" preserveAspectRatio="none" role="img" aria-label="Realized PnL over ${pnls.length} closes"><polyline points="${line}"/></svg>`;
+  const x = (i) => (at ? (at[i] - at[0]) / (at.at(-1) - at[0] || 1) : i / (pts.length - 1)) * w;
+  const y = (v) => (h - 2 - ((v - lo) / span) * (h - 4)).toFixed(1);
+  // Over time the total only moves at a close, so it steps rather than slopes.
+  const line = pts.map((v, i) => `${at && i ? `${x(i).toFixed(1)},${y(pts[i - 1])} ` : ''}${x(i).toFixed(1)},${y(v)}`).join(' ');
+  const zero = lo < 0 ? `<line class="zero" x1="0" x2="${w}" y1="${y(0)}" y2="${y(0)}"/>` : '';
+  return `<svg class="curve ${tone(sum)}" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" preserveAspectRatio="none" role="img" aria-label="Realized PnL over ${pnls.length} closes">${zero}<polyline points="${line}"/></svg>`;
 }
 
 // The stretches the account held a position, read from its order events.
@@ -192,7 +204,7 @@ function shiftChart(s, evs, candles) {
   const price = (p) => p.toLocaleString('en-US', { maximumFractionDigits: 0 });
   return `<figure class="chart${filled(evs).length > 12 ? ' dense' : ''}" role="img" aria-label="BTC price through the shift, with ${filled(evs).length} orders">
 <div class="plot"><svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${fills}<polyline points="${line}"/></svg></div>
-<span class="axis hi">${price(hi)}</span><span class="axis lo">${price(lo)}</span>${notes}${marks}
+<span class="axis hi" style="top:${pct(y(hi))}">${price(hi)}</span><span class="axis lo" style="top:${pct(y(lo))}">${price(lo)}</span>${notes}${marks}
 ${live ? `<i class="now" style="left:${pct(x(now))}"></i>` : ''}<i class="wall"></i><i class="head"></i></figure>`;
 }
 
@@ -329,7 +341,7 @@ function moments(s, evs) {
     if (evs[evs.indexOf(e) - 1]?.kind === 'no-fill') return 'Nothing to match within 0.5% of the mark at first. Filled on a retry.';
     return e.position === '0' ? "Copied the trader's close." : "Copied the trader's new position at the shift's size.";
   };
-  return orders.map((e, i) => `<li data-n="${i + 1}"><i class="mark ${e.side}">${i + 1}</i><h3>${side(e)} ${btc(e.quantity)} BTC</h3><p>${why(e)}</p></li>`).slice(-4).join('');
+  return orders.map((e, i) => `<li data-n="${i + 1}"><i class="mark ${e.side}">${i + 1}</i><h3>${side(e)} ${btc(e.quantity)} ${tok('BTC')}</h3><p>${why(e)}</p></li>`).slice(-4).join('');
 }
 
 // A real finished shift on the home page: the outcome a user gets back.
@@ -340,7 +352,7 @@ function handover(s, evs) {
 <header class="lede"><h2 class="section__title" id="shown">What you get back</h2><p class="sub">Shift #${s.id}, covered by ${s.trader ? who(s.trader) : 'the preset BTC trend'}${flat ? ', ended flat' : ''}</p></header>
 <div class="log">
 <ol class="moments">${moments(s, evs)}</ol>
-<div class="log__main"><p class="outcome">${pnl === undefined ? '' : `<b class="${tone(pnl)}">${usd(pnl)} USDso</b>`}<span>${orders.length} orders in ${mins} minutes</span></p>
+<div class="log__main"><p class="outcome">${pnl === undefined ? '' : `<b class="${tone(pnl)}">${usd(pnl)} ${tok('USDso')}</b>`}<span>${orders.length} orders in ${mins} minutes</span></p>
 ${timeline(s, evs, candles)}</div>
 </div>
 <footer class="run-foot"><a class="quiet" href="/shift/${s.link}">View the full shift</a>${candles?.length > 1 ? '<button class="copy" id="replay" type="button">Replay this shift</button>' : ''}${tally ? `<span>Real orders on Somnia Tokyo testnet. <a class="quiet" href="/traders">Traders</a> ranks ${tally.closes.toLocaleString('en-US')} closes by ${tally.traders.toLocaleString('en-US')} traders.</span>` : ''}</footer>
@@ -392,7 +404,7 @@ function home(selected) {
     <input type="hidden" name="trader" value="${esc(chosen?.account ?? '')}"><input type="hidden" name="until" id="end">
     <div class="choice">
       <span class="choice__label">Trader</span>
-      ${chosen ? `<div class="choice__who">${who(chosen.account)}</div><div class="choice__foot">${chosen.pnl === null ? '<span></span>' : `<span class="num ${tone(chosen.pnl)}">${usd(chosen.pnl).slice(0, -3)} in 7 days</span>`}<a class="quiet" href="/traders">Change trader</a></div>` : '<p class="sub">Loading the last 3 days of trades. This takes about 5 minutes on a first run.</p>'}
+      ${chosen ? `<div class="choice__who">${who(chosen.account)}</div><div class="choice__foot">${chosen.pnl === null ? '<span></span>' : `<span class="num ${tone(chosen.pnl)}">${usd(chosen.pnl).slice(0, -3)} ${tok('USDso')} in 7 days</span>`}<a class="quiet" href="/traders">Change trader</a></div>` : '<p class="sub">Loading the last 3 days of trades. This takes about 5 minutes on a first run.</p>'}
     </div>
     <div class="choice choice--time">
       <label class="choice__label" for="until">Cover until</label>
@@ -641,8 +653,8 @@ async function shiftSetup(q) {
     <h1 tabindex="-1">Set your size and loss limit</h1>
     <div class="wizard__body">
       <div class="two">
-        <div><label for="size">Size per trade</label><div class="unit"><input id="size" type="number" inputmode="numeric" min="5" max="1000" step="1" value="${Number(q.size) || FOLLOW_SIZE}" required><span>USDso</span></div></div>
-        <div><label for="loss">Stop if it loses</label><div class="unit"><input id="loss" type="number" inputmode="numeric" min="1" step="1" value="${Number(q.loss) || 5}" required><span>USDso</span></div></div>
+        <div><label for="size">Size per trade</label><div class="unit"><input id="size" type="number" inputmode="numeric" min="5" max="1000" step="1" value="${Number(q.size) || FOLLOW_SIZE}" required><span>${tok('USDso')}</span></div></div>
+        <div><label for="loss">Stop if it loses</label><div class="unit"><input id="loss" type="number" inputmode="numeric" min="1" step="1" value="${Number(q.loss) || 5}" required><span>${tok('USDso')}</span></div></div>
       </div>
       <p class="err" id="size-err" role="alert"></p>
     </div>
@@ -773,14 +785,14 @@ async function shift(s) {
   const address = (label, a) => `<div class="row"><dt>${label}</dt><dd>${esc(a)}</dd><button class="copy" type="button" data-copy="${esc(a)}">Copy</button></div>`;
   const value = (label, v) => `<div class="row"><dt>${label}</dt><dd>${v}</dd></div>`;
   return page(`${title} · Offshift`, `
-<div class="case-top">${status(s.status)}<span class="dim">${s.trader ? 'Follow a trader' : 'Preset strategy'} · BTC perp</span></div>
+<div class="case-top">${status(s.status)}<span class="dim">${s.trader ? 'Follow a trader' : 'Preset strategy'} · ${tok('BTC')} perp</span></div>
 <header class="case-head">
   <div><h1>${esc(title)}</h1><p class="sub">${closing ? 'Closing out.' : running ? `Ends ${time(s.ends_at)}.` : esc(s.reason ?? 'Ended at its end time, flat.')}${abandoned ? ' Offshift has stopped, so close the remaining position on <a class="quiet" href="https://app.testnet.dreamdex.io">dreamDEX</a>.' : ''}</p></div>
   <div id="owner" hidden>${closing ? '' : running ? '<button class="btn btn--secondary" id="stop">End shift now</button>' : `<a class="btn" href="/link/${esc(s.bot)}?${esc(again)}">Run again</a>`}</div>
 </header>
 <dl class="cells">
-  <div class="cell"><dt class="cell__q">${running ? 'What is it making?' : 'What did it make?'}</dt><dd class="cell__a big ${tone(pnl)}">${pnl === null ? '–' : usd(pnl)}</dd><dd class="cell__note">USDso, ${running ? 'realized plus open' : 'realized'}</dd><dd><span class="prov prov--read">Indexer</span></dd></div>
-  <div class="cell"><dt class="cell__q">Where is the account?</dt><dd class="cell__a">${size === null ? '–' : held(size)}</dd>${running ? '<dd class="cell__note">Read from chain just now</dd><dd><span class="prov prov--live">Live</span></dd>' : ordered ? '<dd class="cell__note">After the last order</dd><dd><span class="prov prov--receipt">On chain</span></dd>' : ''}</div>
+  <div class="cell"><dt class="cell__q">${running ? 'What is it making?' : 'What did it make?'}</dt><dd class="cell__a big ${tone(pnl)}">${pnl === null ? '–' : usd(pnl)}</dd><dd class="cell__note">${tok('USDso')}, ${running ? 'realized plus open' : 'realized'}</dd><dd><span class="prov prov--read">Indexer</span></dd></div>
+  <div class="cell"><dt class="cell__q">Where is the account?</dt><dd class="cell__a">${size === null ? '–' : held(size, true)}</dd>${running ? '<dd class="cell__note">Read from chain just now</dd><dd><span class="prov prov--live">Live</span></dd>' : ordered ? '<dd class="cell__note">After the last order</dd><dd><span class="prov prov--receipt">On chain</span></dd>' : ''}</div>
   <div class="cell"><dt class="cell__q">How many orders?</dt><dd class="cell__a">${filled(evs).length}</dd>${ordered ? '<dd class="cell__note">Listed below</dd><dd><span class="prov prov--receipt">On chain</span></dd>' : ''}</div>
   <div class="cell"><dt class="cell__q">How much time remains?</dt><dd class="cell__a">${closing ? 'Closing out' : running ? `<span id="left" data-end="${s.ends_at}"></span>` : 'None'}</dd><dd class="cell__note">${running ? 'Ends' : 'Ended'} ${time(s.ends_at)}</dd><dd><span class="prov">Set by the owner</span></dd></div>
 </dl>
@@ -790,12 +802,12 @@ ${timeline(s, evs, candles)}
   <dl class="fields">
     ${s.trader ? address('Covered by', s.trader) : value('Covered by', 'Preset BTC trend')}${address('Account', s.owner)}
     ${address('Bot', s.bot)}${value('Cover until', time(s.ends_at, true))}
-    ${value('Size per trade', `${esc(s.notional)} USDso`)}${value('Loss limit', s.max_loss ? `${esc(s.max_loss)} USDso` : 'None')}
+    ${value('Size per trade', `${esc(s.notional)} ${tok('USDso')}`)}${value('Loss limit', s.max_loss ? `${esc(s.max_loss)} ${tok('USDso')}` : 'None')}
   </dl>
 </section>
 <section class="panel">
   <div class="panel__head"><h2 class="section__title">Activity</h2>${evs.some((e) => e.tx) ? '<span class="prov prov--receipt">On chain</span>' : ''}</div>
-  ${evs.length ? `<div class="wrap"><table class="events"><thead><tr><th>Time</th><th>Event</th><th class="num opt">BTC</th><th>Transaction</th></tr></thead><tbody>
+  ${evs.length ? `<div class="wrap"><table class="events"><thead><tr><th>Time</th><th>Event</th><th class="num opt">${tok('BTC')}</th><th>Transaction</th></tr></thead><tbody>
 ${evs.map((e) => `<tr data-ev="${e.id}"><td>${time(e.at)}</td><td class="ev"><span class="ev-line">${numbers.has(e.id) ? `<i class="mark ${e.side}">${numbers.get(e.id)}</i>` : ''}${word(e)}</span>${e.note ? `<small>${esc(e.note)}</small>` : ''}</td><td class="num opt">${e.quantity ? btc(e.quantity) : ''}</td><td class="tx">${e.tx ? `${esc(short(e.tx))} <button class="copy" type="button" data-copy="${esc(e.tx)}">Copy</button><small>${chain(e)}</small>` : ''}</td></tr>`).join('')}
 </tbody></table></div>${evs.some((e) => e.tx) ? '<p class="fine">Each transaction was read back from the Somnia Tokyo testnet RPC when this page loaded.</p>' : ''}`
     : `<p class="empty">${running ? `Nothing yet. ${s.trader ? "The shift copies the trader's next move within seconds." : 'The strategy checks the trend every minute.'}` : 'No orders were placed.'}</p>`}
@@ -863,7 +875,7 @@ async function traderPage(account) {
   const price = (n) => (n ? raw(n).toLocaleString('en-US', { maximumFractionDigits: raw(n) < 10 ? 4 : 0 }) : '–');
   const volume = (n) => n.toLocaleString('en-US', { maximumFractionDigits: 0 });
   const side = (units) => `${units > 0n ? 'Long' : 'Short'}`;
-  const now = positions.length === 0 ? 'Flat' : positions.length === 1 ? `${side(positions[0].size)} ${pairName(positions[0].pool)}` : `${positions.length} positions`;
+  const now = positions.length === 0 ? 'Flat' : positions.length === 1 ? `${side(positions[0].size)} ${tok(pairName(positions[0].pool))}` : `${positions.length} positions`;
   const move = lastMove(account, stats.last || r.last), live = move === moved.get(account);
   const cover = `/?trader=${esc(account)}`, title = `Trader ${short(account)}`;
   const line = (label, value) => `<div><dt>${label}</dt><dd class="${tone(value)}">${usd(value)}</dd></div>`;
@@ -874,14 +886,14 @@ async function traderPage(account) {
   <a class="btn" href="${cover}">Pick this trader</a>
 </header>
 <dl class="cells">
-  <div class="cell"><dt class="cell__q">What did they make?</dt><dd class="cell__a big ${tone(made)}">${usd(made)}</dd><dd class="cell__note">USDso, realized${h ? ' on all pairs' : ' on BTC'}</dd><dd><span class="prov prov--read">Indexer</span></dd></div>
-  <div class="cell"><dt class="cell__q">Where are they now?</dt><dd class="cell__a">${h ? now : '–'}</dd><dd class="cell__note ${tone(openTotal)}">${h ? (positions.length ? `${usd(openTotal)} USDso open` : 'No open positions') : 'Reload to retry'}</dd><dd><span class="prov prov--read">Indexer</span></dd></div>
+  <div class="cell"><dt class="cell__q">What did they make?</dt><dd class="cell__a big ${tone(made)}">${usd(made)}</dd><dd class="cell__note">${tok('USDso')}, realized${h ? ' on all pairs' : ` on ${tok('BTC')}`}</dd><dd><span class="prov prov--read">Indexer</span></dd></div>
+  <div class="cell"><dt class="cell__q">Where are they now?</dt><dd class="cell__a">${h ? now : '–'}</dd><dd class="cell__note ${tone(openTotal)}">${h ? (positions.length ? `${usd(openTotal)} ${tok('USDso')} open` : 'No open positions') : 'Reload to retry'}</dd><dd><span class="prov prov--read">Indexer</span></dd></div>
   <div class="cell"><dt class="cell__q">How often do they win?</dt><dd class="cell__a">${count ? `${Math.round((wins / count) * 100)}%` : '–'}</dd><dd class="cell__note">${wins} of ${count} closes</dd><dd><span class="prov prov--read">Indexer</span></dd></div>
-  <div class="cell"><dt class="cell__q">What was their worst close?</dt><dd class="cell__a ${tone(loss ?? 0)}">${loss === null ? (h ? 'No losses' : '–') : usd(loss)}</dd>${loss === null ? '' : `<dd class="cell__note">USDso on ${esc(pairName(worst.pool))}, ${time(Number(worst.at) * 1000, true)}</dd>`}<dd><span class="prov prov--read">Indexer</span></dd></div>
+  <div class="cell"><dt class="cell__q">What was their worst close?</dt><dd class="cell__a ${tone(loss ?? 0)}">${loss === null ? (h ? 'No losses' : '–') : usd(loss)}</dd>${loss === null ? '' : `<dd class="cell__note">${tok('USDso')} on ${tok(pairName(worst.pool))}, ${time(Number(worst.at) * 1000, true)}</dd>`}<dd><span class="prov prov--read">Indexer</span></dd></div>
 </dl>
 <section class="follow" aria-labelledby="follow-title">
   <div class="panel__head"><h2 class="section__title" id="follow-title">If you had followed them on BTC</h2><span class="prov">Estimate</span></div>
-  ${follow ? `<p class="outcome"><b class="${tone(follow.pnl)}">${usd(follow.pnl)} USDso</b><span>at ${FOLLOW_SIZE} USDso a trade, ${follow.trades} ${follow.trades === 1 ? 'trade' : 'trades'} closed</span></p>
+  ${follow ? `<p class="outcome"><b class="${tone(follow.pnl)}">${usd(follow.pnl)} ${tok('USDso')}</b><span>at ${FOLLOW_SIZE} ${tok('USDso')} a trade, ${follow.trades} ${follow.trades === 1 ? 'trade' : 'trades'} closed</span></p>
   <p class="fine">Offshift copies BTC only for now. This replays its copy rule at this trader's own BTC fill prices. It leaves out fees, funding, slippage, your loss limit and the seconds a copy takes, and past results don't predict future ones.</p>` : `<p class="sub">${missing}</p>`}
 </section>
 ${h && rows.length ? `<section class="panel" aria-labelledby="activity-title">
@@ -900,13 +912,13 @@ ${h && rows.length ? `<section class="panel" aria-labelledby="activity-title">
 <section class="panel" aria-labelledby="pairs-title">
   <div class="panel__head"><h2 class="section__title" id="pairs-title">Pairs traded</h2></div>
   <div class="wrap"><table><thead><tr><th>Pair</th><th class="num opt">Volume</th><th class="num opt">Closes</th><th class="num">Win rate</th><th class="num">Realized PnL</th></tr></thead><tbody>
-${markets.map((m) => `<tr><td>${esc(pairName(m.pool))}${m.pool === POOL_BTC ? '<small class="tag">Copied by Offshift</small>' : ''}</td><td class="num opt">${volume(m.volume)}</td><td class="num opt">${m.closes}</td><td class="num">${m.closes ? `${Math.round((m.wins / m.closes) * 100)}%` : '–'}</td><td class="num ${tone(raw(m.pnl))}">${usd(raw(m.pnl))}</td></tr>`).join('')}
+${markets.map((m) => `<tr><td>${tok(pairName(m.pool))}${m.pool === POOL_BTC ? '<small class="tag">Copied by Offshift</small>' : ''}</td><td class="num opt">${volume(m.volume)}</td><td class="num opt">${m.closes}</td><td class="num">${m.closes ? `${Math.round((m.wins / m.closes) * 100)}%` : '–'}</td><td class="num ${tone(raw(m.pnl))}">${usd(raw(m.pnl))}</td></tr>`).join('')}
 </tbody></table></div><p class="fine">Volume is in USDso. A close is one fill, so an order that fills in parts counts several times.${rows.length >= MAX_CHANGES ? ` This account trades too often to read in full, so this page covers its latest ${MAX_CHANGES.toLocaleString('en-US')} position changes.` : ''}</p>
 </section>
 <section class="panel" aria-labelledby="pnl-title">
   <div class="panel__head"><h2 class="section__title" id="pnl-title">PnL</h2></div>
   <div class="pnl-split">
-    <div class="trace">${closes.length > 1 ? `${curve(closes.map((c) => raw(c.realizedPnl)), 1000, 240)}<div class="ends">${time(Number(closes[0].timestamp) * 1000, true)}<span>Realized, all pairs</span>${time(Number(closes.at(-1).timestamp) * 1000, true)}</div>` : '<p class="sub">Not enough closes to draw.</p>'}</div>
+    <div class="trace">${closes.length > 1 ? `${curve(closes.map((c) => raw(c.realizedPnl)), 1000, 240, closes.map((c) => Number(c.timestamp)))}<div class="ends">${time(Number(closes[0].timestamp) * 1000, true)}<span>Realized, all pairs</span>${time(Number(closes.at(-1).timestamp) * 1000, true)}</div>` : '<p class="sub">Not enough closes to draw.</p>'}</div>
     <dl class="sheet sheet--money">${line('Realized', made)}${line('Funding', fundingNet)}${line('Open', openTotal)}${line('Total', net)}</dl>
   </div>
   <p class="fine">In USDso, before fees. Funding is what they received less what they paid.</p>
@@ -914,13 +926,13 @@ ${markets.map((m) => `<tr><td>${esc(pairName(m.pool))}${m.pool === POOL_BTC ? '<
 ${positions.length ? `<section class="panel" aria-labelledby="open-title">
   <div class="panel__head"><h2 class="section__title" id="open-title">Open positions</h2></div>
   <div class="wrap"><table><thead><tr><th>Position</th><th class="num opt">Entry</th><th class="num opt">Mark</th><th class="num">Open PnL</th></tr></thead><tbody>
-${positions.map((p) => `<tr><td>${side(p.size)} ${quantity(p.size, p.pool)} ${esc(pairName(p.pool))}</td><td class="num opt">${price(p.entry)}</td><td class="num opt">${price(p.mark)}</td><td class="num ${tone(p.pnl ?? 0)}">${p.pnl === null ? '–' : usd(p.pnl)}</td></tr>`).join('')}
+${positions.map((p) => `<tr><td>${side(p.size)} ${quantity(p.size, p.pool)} ${tok(pairName(p.pool))}</td><td class="num opt">${price(p.entry)}</td><td class="num opt">${price(p.mark)}</td><td class="num ${tone(p.pnl ?? 0)}">${p.pnl === null ? '–' : usd(p.pnl)}</td></tr>`).join('')}
 </tbody></table></div>
 </section>` : ''}
 <section class="panel">
   <div class="panel__head"><h2 class="section__title">Recent closes</h2></div>
   ${orders.length ? `<div class="wrap"><table><thead><tr><th class="opt">Closed</th><th>Position</th><th class="num opt">Entry</th><th class="num opt">Exit</th><th class="num">PnL</th></tr></thead><tbody>
-${orders.slice(-20).reverse().map((o) => `<tr><td class="opt">${time(Number(o.at) * 1000, true)}</td><td>${o.long ? 'Long' : 'Short'} ${quantity(o.size, o.pool)} ${esc(pairName(o.pool))}<small class="on-phone dim">${time(Number(o.at) * 1000, true)}</small></td><td class="num opt">${price(o.entry)}</td><td class="num opt">${price(o.exit)}</td><td class="num ${tone(raw(o.pnl))}">${usd(raw(o.pnl))}</td></tr>`).join('')}
+${orders.slice(-20).reverse().map((o) => `<tr><td class="opt">${time(Number(o.at) * 1000, true)}</td><td>${o.long ? 'Long' : 'Short'} ${quantity(o.size, o.pool)} ${tok(pairName(o.pool))}<small class="on-phone dim">${time(Number(o.at) * 1000, true)}</small></td><td class="num opt">${price(o.entry)}</td><td class="num opt">${price(o.exit)}</td><td class="num ${tone(raw(o.pnl))}">${usd(raw(o.pnl))}</td></tr>`).join('')}
 </tbody></table></div><p class="fine">One row per order, before fees and funding.</p>` : `<p class="empty">${h ? 'No closes in the last 7 days.' : missing}</p>`}
 </section>`, { script: TRADER_SCRIPT });
 }
@@ -986,6 +998,7 @@ createServer(async (req, res) => {
   try {
     const picked = url.searchParams.get('trader') ?? '';
     if (req.method === 'GET' && url.pathname === '/') return html(home(isAddress(picked) ? getAddress(picked) : null));
+    if (req.method === 'GET' && a === 'tokens' && tokens.has(b)) return res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'public, max-age=86400', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'" }).end(tokens.get(b));
     if (req.method === 'GET' && a === 'clips' && screenFiles.has(b)) return res.writeHead(200, { 'content-type': 'image/webp', 'cache-control': 'public, max-age=86400' }).end(screenFiles.get(b));
     if (req.method === 'GET' && url.pathname === '/how') return html(howPage());
     if (req.method === 'GET' && url.pathname === '/traders') return html(tradersPage());
