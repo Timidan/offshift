@@ -118,6 +118,7 @@ async function refreshBoard() {
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 // dreamDEX's own token icons, shown before each symbol. 1000PEPE uses pepe.svg.
 const tokens = new Map(readdirSync(new URL('./tokens/', import.meta.url)).map((f) => [f, readFileSync(new URL(`./tokens/${f}`, import.meta.url))]));
+const inUsd = (label) => `${label}<span class="th-unit">${tok('USDso')}</span>`;
 const tok = (sym) => {
   const file = `${String(sym).toLowerCase().replace(/^\d+/, '')}.svg`;
   return `<span class="tok">${tokens.has(file) ? `<img src="/tokens/${file}" alt="" width="16" height="16">` : ''}${esc(sym)}</span>`;
@@ -431,7 +432,7 @@ function tradersPage() {
   };
   return page('Traders · Offshift', `
 <header class="case-head"><div><h1>Traders</h1><p class="sub">Ranked by the last 7 days on BTC, the market Offshift copies. Open a trader for every pair they trade.</p></div></header>
-${rows.length ? `<div class="wrap"><table class="rows"><thead><tr><th class="opt"><span class="vh">Rank</span></th><th>Trader</th><th class="opt-lg"><span class="vh">Realized PnL curve</span></th><th class="num">Realized PnL</th><th class="num opt">Open PnL</th><th class="num opt-md">Win rate</th><th class="num opt-md">Max drawdown</th><th class="num opt-md">Closes</th><th class="num opt-md">Pairs</th><th class="num opt">Last move</th><th><span class="vh">Action</span></th></tr></thead><tbody>
+${rows.length ? `<div class="wrap"><table class="rows"><thead><tr><th class="opt"><span class="vh">Rank</span></th><th>Trader</th><th class="opt-lg"><span class="vh">Realized PnL curve</span></th><th class="num">${inUsd('Realized PnL')}</th><th class="num opt">${inUsd('Open PnL')}</th><th class="num opt-md">Win rate</th><th class="num opt-md">${inUsd('Max drawdown')}</th><th class="num opt-md">Closes</th><th class="num opt-md">Pairs</th><th class="num opt">Last move</th><th><span class="vh">Action</span></th></tr></thead><tbody>
 ${rows.map((t, i) => { const [cls, now] = opened(t); return `<tr><td class="rank opt">${i + 1}</td><td><a class="go" href="/trader/${esc(t.account)}">${who(t.account)}</a></td><td class="opt-lg">${curve(t.pnls, 132, 28)}</td><td class="num pnl ${tone(t.pnl)}">${usd(t.pnl)}<small class="on-phone ${cls}">Open: ${now}</small></td><td class="num opt ${cls}">${now}</td><td class="num opt-md">${Math.round(t.winRate * 100)}%</td><td class="num opt-md">${usd(-t.drawdown)}</td><td class="num opt-md">${t.closes}</td><td class="num opt-md">${histories.has(t.account) ? new Set(histories.get(t.account).rows.map((c) => c.pool)).size : '–'}</td><td class="num opt dim">${ago(lastMove(t.account, histories.get(t.account)?.rows.at(-1)?.timestamp ?? t.last))}</td><td class="num"><a class="choose" href="/?trader=${esc(t.account)}" aria-label="Pick ${esc(short(t.account))}">Pick</a></td></tr>`; }).join('')}
 </tbody></table></div><p class="fine">Win rate and drawdown count closed trades only, so read them beside open PnL. Market makers and records under 10 closes or 2 days are left out.</p>`
     : '<p class="empty">Loading the last 3 days of trades from the indexer. This takes about 5 minutes on a first run.</p>'}`, { at: '/traders' });
@@ -443,7 +444,7 @@ function myShifts(bots) {
   const mine = new Set(bots.slice(0, 100).filter((b) => isAddress(b?.bot ?? '') && store.checkSecret(b.bot, b.secret)).map((b) => getAddress(b.bot)));
   const shifts = store.sessions().filter((s) => mine.has(s.bot)).map((s) => ({ ...s, evs: store.events(s.id) }));
   if (!shifts.length) return '';
-  return `<div class="wrap"><table class="rows"><thead><tr><th>Shift</th><th>Covered by</th><th class="opt-md"><span class="vh">Timeline</span></th><th class="num">PnL</th><th class="num opt">Orders</th><th>Status</th><th class="opt-md">Started</th></tr></thead><tbody>
+  return `<div class="wrap"><table class="rows"><thead><tr><th>Shift</th><th>Covered by</th><th class="opt-md"><span class="vh">Timeline</span></th><th class="num">${inUsd('PnL')}</th><th class="num opt">Orders</th><th>Status</th><th class="opt-md">Started</th></tr></thead><tbody>
 ${shifts.map((s) => { const pnl = finals.get(s.id); return `<tr><td><a class="go" href="/shift/${s.link}">#${s.id}</a></td><td>${s.trader ? who(s.trader) : 'Preset: BTC trend'}</td><td class="opt-md">${shiftBar(s, s.evs, true)}</td><td class="num ${tone(pnl)}">${pnl === undefined ? '–' : usd(pnl)}</td><td class="num opt">${filled(s.evs).length}</td><td>${status(s.status)}</td><td class="opt-md">${time(s.created_at, true)}</td></tr>`; }).join('')}
 </tbody></table></div>`;
 }
@@ -911,7 +912,7 @@ ${h && rows.length ? `<section class="panel" aria-labelledby="activity-title">
 </section>
 <section class="panel" aria-labelledby="pairs-title">
   <div class="panel__head"><h2 class="section__title" id="pairs-title">Pairs traded</h2></div>
-  <div class="wrap"><table><thead><tr><th>Pair</th><th class="num opt">Volume</th><th class="num opt">Closes</th><th class="num">Win rate</th><th class="num">Realized PnL</th></tr></thead><tbody>
+  <div class="wrap"><table><thead><tr><th>Pair</th><th class="num opt">${inUsd('Volume')}</th><th class="num opt">Closes</th><th class="num">Win rate</th><th class="num">${inUsd('Realized PnL')}</th></tr></thead><tbody>
 ${markets.map((m) => `<tr><td>${tok(pairName(m.pool))}${m.pool === POOL_BTC ? '<small class="tag">Copied by Offshift</small>' : ''}</td><td class="num opt">${volume(m.volume)}</td><td class="num opt">${m.closes}</td><td class="num">${m.closes ? `${Math.round((m.wins / m.closes) * 100)}%` : '–'}</td><td class="num ${tone(raw(m.pnl))}">${usd(raw(m.pnl))}</td></tr>`).join('')}
 </tbody></table></div><p class="fine">Volume is in USDso. A close is one fill, so an order that fills in parts counts several times.${rows.length >= MAX_CHANGES ? ` This account trades too often to read in full, so this page covers its latest ${MAX_CHANGES.toLocaleString('en-US')} position changes.` : ''}</p>
 </section>
@@ -925,13 +926,13 @@ ${markets.map((m) => `<tr><td>${tok(pairName(m.pool))}${m.pool === POOL_BTC ? '<
 </section>` : ''}
 ${positions.length ? `<section class="panel" aria-labelledby="open-title">
   <div class="panel__head"><h2 class="section__title" id="open-title">Open positions</h2></div>
-  <div class="wrap"><table><thead><tr><th>Position</th><th class="num opt">Entry</th><th class="num opt">Mark</th><th class="num">Open PnL</th></tr></thead><tbody>
+  <div class="wrap"><table><thead><tr><th>Position</th><th class="num opt">Entry</th><th class="num opt">Mark</th><th class="num">${inUsd('Open PnL')}</th></tr></thead><tbody>
 ${positions.map((p) => `<tr><td>${side(p.size)} ${quantity(p.size, p.pool)} ${tok(pairName(p.pool))}</td><td class="num opt">${price(p.entry)}</td><td class="num opt">${price(p.mark)}</td><td class="num ${tone(p.pnl ?? 0)}">${p.pnl === null ? '–' : usd(p.pnl)}</td></tr>`).join('')}
 </tbody></table></div>
 </section>` : ''}
 <section class="panel">
   <div class="panel__head"><h2 class="section__title">Recent closes</h2></div>
-  ${orders.length ? `<div class="wrap"><table><thead><tr><th class="opt">Closed</th><th>Position</th><th class="num opt">Entry</th><th class="num opt">Exit</th><th class="num">PnL</th></tr></thead><tbody>
+  ${orders.length ? `<div class="wrap"><table><thead><tr><th class="opt">Closed</th><th>Position</th><th class="num opt">Entry</th><th class="num opt">Exit</th><th class="num">${inUsd('PnL')}</th></tr></thead><tbody>
 ${orders.slice(-20).reverse().map((o) => `<tr><td class="opt">${time(Number(o.at) * 1000, true)}</td><td>${o.long ? 'Long' : 'Short'} ${quantity(o.size, o.pool)} ${tok(pairName(o.pool))}<small class="on-phone dim">${time(Number(o.at) * 1000, true)}</small></td><td class="num opt">${price(o.entry)}</td><td class="num opt">${price(o.exit)}</td><td class="num ${tone(raw(o.pnl))}">${usd(raw(o.pnl))}</td></tr>`).join('')}
 </tbody></table></div><p class="fine">One row per order, before fees and funding.</p>` : `<p class="empty">${h ? 'No closes in the last 7 days.' : missing}</p>`}
 </section>`, { script: TRADER_SCRIPT });

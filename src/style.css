@@ -80,8 +80,11 @@ h3{font-size:16px;font-weight:600;line-height:1.35}
 .err:empty{display:none}
 
 /* How each value is known */
-.prov{display:inline-flex;color:var(--ink-3);font-family:var(--mono);font-size:12px;white-space:nowrap}
-.prov--receipt,.prov--live,.prov--read{color:var(--ink-2)}
+.prov{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border:1px dashed var(--line2);border-radius:6px;color:var(--ink-2);font-family:var(--mono);font-size:12px;line-height:1.2;white-space:nowrap}
+.prov--read,.prov--receipt,.prov--live{border-style:solid}
+.prov--receipt{border-color:var(--heat-2);color:var(--heat-4)}
+.prov--live{border-color:rgb(99 217 173 / .45);color:var(--up)}
+.th-unit{margin-inline-start:6px;color:var(--ink-3);font-weight:400}
 .status{color:var(--ink-2);font-size:14px;font-weight:600}
 .status.running{color:var(--ink)}
 .status.failed{color:var(--down)}
