@@ -7,7 +7,7 @@
 **Pick a trader to cover your perps account until a time you set.**<br>
 Offshift copies their trades within your limits, closes you out at the end, and hands you every fill.
 
-[How it works](#how-it-works) · [On-chain record](#on-chain-record) · [Security](#security-and-privacy) · [Limits](#limits) · [Quickstart](#quickstart) · [API](#api)
+**[Open Offshift](https://offshift.timidan.xyz)** · [How it works](#how-it-works) · [On-chain record](#on-chain-record) · [Security](#security-and-privacy) · [Limits](#limits) · [Quickstart](#quickstart) · [API](#api)
 
 ![Somnia Tokyo testnet](https://img.shields.io/badge/network-Somnia%20Tokyo%20testnet-123a42)
 ![dreamDEX BTC perp](https://img.shields.io/badge/market-dreamDEX%20BTC%20perp-c69a3c)
