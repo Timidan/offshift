@@ -68,7 +68,7 @@ flowchart LR
 
 1. **Pick.** Choose a trader from the board and an end time.
 2. **Add the bot.** Paste your dreamDEX address and Offshift makes a bot for it. Add that bot in dreamDEX's Link a bot screen, which can send it gas in the same step. Offshift checks access, gas and margin every 5 seconds and moves on by itself. A shift needs 5 USDso in your perps account and about 0.5 STT on the bot.
-3. **Set your limits.** Size per trade and loss limit, then review and start.
+3. **Set your limits.** Size per trade and loss limit, then review and start. The review shows what the trader holds now, and whether your first order goes in at the start or waits for their next move.
 4. **Copy.** Each pass reads your position and the trader's from the chain, then closes the gap with one immediate-or-cancel order limited to 0.5% through the mark. The Reactivity event only wakes the worker; the chain read decides. If nothing fills, it tries again in 10 seconds.
 5. **End.** At the end time or the loss limit, the worker stops copying and brings you to flat. If you remove the bot on dreamDEX, the shift stops.
 6. **Hand over.** The shift page shows the result, a BTC chart of what you held, every order with its transaction and block, and **Run again**.
@@ -83,15 +83,15 @@ Each trader has a page across all perp markets, with an estimate of what followi
 
 ## On-chain record
 
-Every shift so far ran on the project's test account. All 14 orders and both setup transactions were read back from the RPC, and all of them succeeded.
+Every shift so far ran on the project's test account. All 18 orders and both setup transactions were read back from the RPC, and all of them succeeded.
 
 | | |
 |---|---|
 | Test account | `0x78fD47fb67a59E0b535b8a8D69D3eB3d7538584E` |
-| Bots | `0x65A4e65092f845477da76EB42Fea71bC9a31F504`, `0x8Aa89972617D75E671Cb54532c03f992153f8D43` |
+| Bots | `0x65A4e65092f845477da76EB42Fea71bC9a31F504`, `0x8Aa89972617D75E671Cb54532c03f992153f8D43`, `0xE377B45CA9426E5BB240E5Cd142F221fA0c2910A` |
 | BTC perp pool | `0x4181dd08e73bbcdd1ba3e615a18f6abd941b94c0` |
-| Shifts | 14, all finished: 13 following a trader, 1 on the preset strategy |
-| Orders | 14 filled at 20 USDso a trade |
+| Shifts | 16, all finished: 15 following a trader, 1 on the preset strategy |
+| Orders | 18 filled at 20 USDso a trade |
 | Entries skipped | 16, with the price past the 0.5% tolerance |
 
 | Shift | What happened | Transactions |
@@ -103,6 +103,8 @@ Every shift so far ran on the project's test account. All 14 orders and both set
 | 11 | Closed flat at its end time | `0xbb0d25dd…0a8e`, `0x05942a32…a9f9` |
 | 13 | Copied an open and its close, 6.3 s and 8.0 s after each event | `0x8eae7ce9…f2c9`, `0xe41ce851…bff0` |
 | 14 | Loss-limit exit. The limit was forced to −1 in the database to test the path | `0x575fcf5c…0f3d`, `0x9b246f5b…68b1` |
+| 15 | Fresh clone of this repo, run through the web app. Ended early with End shift now | `0x12471f43…50be`, `0x9d216e89…86b7` |
+| 16 | Same clone. Closed flat by itself about 20 s after its end time | `0xe0bd8c54…fb1b`, `0xca350434…938c` |
 
 Read any of them from the RPC:
 
@@ -140,7 +142,7 @@ npm start        # http://localhost:8787
 npm test         # strategy and trader insight checks
 ```
 
-On a fresh database the trader board stays empty until the first backfill from the indexer finishes. After that it refreshes every 5 minutes.
+On a fresh database the first load of the trader board takes about 5 minutes, and the first traders appear after about 3. After that it refreshes every 5 minutes.
 
 Keep `OFFSHIFT_SECRET` safe: without it, the stored bot keys can't be read.
 

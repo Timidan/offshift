@@ -7,16 +7,25 @@ db.exec(`CREATE TABLE IF NOT EXISTS closes (id TEXT PRIMARY KEY, pool TEXT NOT N
   CREATE INDEX IF NOT EXISTS closes_by_account ON closes (pool, account, at);`);
 const BACKFILL_S = 3 * 86_400, WINDOW_S = 7 * 86_400, MM_PER_DAY = 200, MIN_CLOSES = 10, MIN_DAYS = 2;
 
+let walk = null; // the current read back through history; an indexer error leaves it for the next refresh to resume
+
 export async function ingest(client, pool) {
   const last = db.prepare('SELECT MAX(at) AS at FROM closes WHERE pool = ?').get(pool).at;
-  const from = last ?? Math.floor(Date.now() / 1000) - BACKFILL_S;
+  walk ??= { from: last ?? Math.floor(Date.now() / 1000) - BACKFILL_S };
   const add = db.prepare('INSERT OR IGNORE INTO closes (id, pool, account, at, pnl) VALUES (?, ?, ?, ?, ?)');
   let total = 0;
-  for (let offset = 0; ; offset += 1000) {
-    const rows = await client.listPerpPositionChanges({ pool, kinds: ['REDUCE', 'CLOSE', 'FLIP'], from, order: 'asc', limit: 1000, offset });
+  // Newest first, stepping back by time: oldest-first queries and deep offsets time out on the indexer.
+  // ponytail: a process restart mid-load loses the walk and leaves a gap; persist it if that ever matters.
+  for (;;) {
+    const query = { pool, kinds: ['REDUCE', 'CLOSE', 'FLIP'], ...walk, order: 'desc', limit: 1000 };
+    const rows = await client.listPerpPositionChanges(query).catch(() => client.listPerpPositionChanges(query)); // a cold read times out once
     for (const r of rows) add.run(r.id, pool, r.account, Number(r.timestamp), Number(r.realizedPnl) / 1e18);
     total += rows.length;
-    if (rows.length < 1000) return total;
+    if (rows.length < 1000) {
+      walk = null;
+      return total;
+    }
+    walk.to = Number(rows.at(-1).timestamp) + 1; // `to` is exclusive; a row read twice is ignored
   }
 }
 

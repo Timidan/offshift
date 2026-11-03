@@ -10,7 +10,7 @@ import * as store from './store.mjs';
 import { rpc, exchange, markets, moved, pass, shiftPnl, openPnl } from './worker.mjs';
 import { board, changes, funding, ingest, MAX_CHANGES, record, trader } from './board.mjs';
 import { activity, byPair, closedOrders } from './insight.mjs';
-import { replay } from './strategy.mjs';
+import { follow, replay } from './strategy.mjs';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const BTC = markets.BTC;
@@ -49,7 +49,7 @@ const shiftEnd = (s, evs) => Math.max(s.ends_at, evs.at(-1)?.at ?? 0);
 async function finalPnl(s, evs = store.events(s.id)) {
   if (s.status === 'running' || finals.has(s.id)) return finals.get(s.id) ?? null;
   const pnl = filled(evs).length ? await shiftPnl(s, markets[s.market], 0n, 0n, 0n, Math.floor(evs.at(-1).at / 1000) + 60) : 0;
-  if (Date.now() - (evs.at(-1)?.at ?? 0) > 300_000) finals.set(s.id, pnl);
+  if (Date.now() - (evs.at(-1)?.at ?? 0) > 3_600_000) finals.set(s.id, pnl); // the indexer can lag by minutes, so wait before keeping this for good
   return pnl;
 }
 
@@ -61,11 +61,25 @@ async function candlesFor(s, evs) {
   return candles;
 }
 
+// Would a shift starting now copy this position at once? The same rule the worker runs.
+const copyNow = (size, avgEntryPrice, markPrice) =>
+  follow({ size: 0n, qty: 1n, leader: size, leaderEntry: raw(avgEntryPrice), mark: raw(markPrice), ending: false }).target !== 0n;
+
+async function traderNow(account) {
+  const [{ size, avgEntryPrice }, { markPrice }] = await Promise.all([
+    exchange.client.getPerpPosition({ marginBank: BTC.marginBank, account, pool: BTC.poolAddress }),
+    exchange.client.getPerpState(BTC.poolAddress),
+  ]);
+  if (size === 0n) return 'Flat. Your first order waits for their next position.';
+  const side = size > 0n ? 'Long' : 'Short';
+  return copyNow(size, avgEntryPrice, markPrice) ? `${side}. Your first order goes in when the shift starts.` : `${side}, but the price has moved on. Your first order waits for their next entry.`;
+}
+
 async function readOpen() {
   const { markPrice } = await exchange.client.getPerpState(BTC.poolAddress);
   await Promise.all(board(BTC.poolAddress, BOARD_ROWS).map(async (t) => {
     const { size, avgEntryPrice } = await exchange.client.getPerpPosition({ marginBank: BTC.marginBank, account: t.account, pool: BTC.poolAddress });
-    open.set(t.account, { size, pnl: Number(formatUnits(openPnl(size, avgEntryPrice, markPrice, BTC), 18)) });
+    open.set(t.account, { size, pnl: Number(formatUnits(openPnl(size, avgEntryPrice, markPrice, BTC), 18)), ready: copyNow(size, avgEntryPrice, markPrice) });
   }));
 }
 
@@ -365,7 +379,7 @@ function howPage() {
 function home(selected) {
   const rows = board(BTC.poolAddress, BOARD_ROWS);
   const shown = store.sessions().map((s) => ({ ...s, evs: store.events(s.id) })).find((s) => s.id === EXAMPLE_SHIFT && s.owner === EXAMPLE_OWNER);
-  const chosen = selected ? rows.find((t) => t.account.toLowerCase() === selected.toLowerCase()) ?? trader(BTC.poolAddress, selected) ?? { account: selected.toLowerCase(), pnl: null } : rows[0];
+  const chosen = selected ? rows.find((t) => t.account.toLowerCase() === selected.toLowerCase()) ?? trader(BTC.poolAddress, selected) ?? { account: selected.toLowerCase(), pnl: null } : rows.find((t) => open.get(t.account)?.ready) ?? rows[0];
   return page('Offshift', `
 <section class="hero" id="cover">
   <canvas id="dial" aria-hidden="true"></canvas>
@@ -375,7 +389,7 @@ function home(selected) {
     <input type="hidden" name="trader" value="${esc(chosen?.account ?? '')}"><input type="hidden" name="until" id="end">
     <div class="choice">
       <span class="choice__label">Trader</span>
-      ${chosen ? `<div class="choice__who">${who(chosen.account)}</div><div class="choice__foot">${chosen.pnl === null ? '<span></span>' : `<span class="num ${tone(chosen.pnl)}">${usd(chosen.pnl).slice(0, -3)} in 7 days</span>`}<a class="quiet" href="/traders">Change trader</a></div>` : '<p class="sub">Loading the last 3 days of trades. Refresh in a minute.</p>'}
+      ${chosen ? `<div class="choice__who">${who(chosen.account)}</div><div class="choice__foot">${chosen.pnl === null ? '<span></span>' : `<span class="num ${tone(chosen.pnl)}">${usd(chosen.pnl).slice(0, -3)} in 7 days</span>`}<a class="quiet" href="/traders">Change trader</a></div>` : '<p class="sub">Loading the last 3 days of trades. This takes about 5 minutes on a first run.</p>'}
     </div>
     <div class="choice choice--time">
       <label class="choice__label" for="until">Cover until</label>
@@ -405,7 +419,7 @@ function tradersPage() {
 ${rows.length ? `<div class="wrap"><table class="rows"><thead><tr><th class="opt"><span class="vh">Rank</span></th><th>Trader</th><th class="opt-lg"><span class="vh">Realized PnL curve</span></th><th class="num">Realized PnL</th><th class="num opt">Open PnL</th><th class="num opt-md">Win rate</th><th class="num opt-md">Max drawdown</th><th class="num opt-md">Closes</th><th class="num opt-md">Pairs</th><th class="num opt">Last move</th><th><span class="vh">Action</span></th></tr></thead><tbody>
 ${rows.map((t, i) => { const [cls, now] = opened(t); return `<tr><td class="rank opt">${i + 1}</td><td><a class="go" href="/trader/${esc(t.account)}">${who(t.account)}</a></td><td class="opt-lg">${curve(t.pnls, 132, 28)}</td><td class="num pnl ${tone(t.pnl)}">${usd(t.pnl)}<small class="on-phone ${cls}">Open: ${now}</small></td><td class="num opt ${cls}">${now}</td><td class="num opt-md">${Math.round(t.winRate * 100)}%</td><td class="num opt-md">${usd(-t.drawdown)}</td><td class="num opt-md">${t.closes}</td><td class="num opt-md">${histories.has(t.account) ? new Set(histories.get(t.account).rows.map((c) => c.pool)).size : '–'}</td><td class="num opt dim">${ago(lastMove(t.account, histories.get(t.account)?.rows.at(-1)?.timestamp ?? t.last))}</td><td class="num"><a class="choose" href="/?trader=${esc(t.account)}" aria-label="Pick ${esc(short(t.account))}">Pick</a></td></tr>`; }).join('')}
 </tbody></table></div><p class="fine">Win rate and drawdown count closed trades only, so read them beside open PnL. Market makers and records under 10 closes or 2 days are left out.</p>`
-    : '<p class="empty">Loading the last 3 days of trades from the indexer. Refresh in a minute.</p>'}`, { at: '/traders' });
+    : '<p class="empty">Loading the last 3 days of trades from the indexer. This takes about 5 minutes on a first run.</p>'}`, { at: '/traders' });
 }
 
 // Shifts belong to whoever holds their bot's secret. There is no sign-in, so that secret is the proof:
@@ -543,14 +557,14 @@ function accountSetup() {
   <section class="wizard__step" id="s-bot" hidden>
     <p class="wizard__count">Step 2 of 2</p>
     <h1 tabindex="-1">Add your bot on dreamDEX</h1>
-    <p class="sub">In your dreamDEX wallet, choose Link a bot, paste this address and press Add bot. Leave Perps and the gas option on.</p>
+    <p class="sub">In your dreamDEX wallet, choose Link a bot, paste this address and press Add bot. Leave Perps on. If your wallet has no STT, turn the gas option off.</p>
     ${clip('bot')}
     <div class="wizard__body">
       <div class="addr"><code id="bot-address"></code></div>
       <a class="btn" id="open" href="${DREAMDEX_URL}" target="_blank" rel="noopener" data-copy="">Copy address and open dreamDEX</a>
       <dl class="sheet checks">
         <div id="c-grant"><dt>Bot access</dt><dd class="state">Checking</dd></div>
-        <div id="c-gas"><dt>Bot gas</dt><dd class="state">Checking</dd><dd class="hint" hidden>Top up on the Bots tab in dreamDEX.</dd></div>
+        <div id="c-gas"><dt>Bot gas</dt><dd class="state">Checking</dd><dd class="hint" hidden>Send this address 1 STT from any wallet.</dd></div>
       </dl>
     </div>
     <p class="sub" id="wait" role="status">Waiting for your bot to be added. This moves on by itself.</p>
@@ -571,6 +585,7 @@ async function check() {
   set('c-grant', r.granted, r.granted ? 'Added' : 'Waiting for dreamDEX');
   set('c-gas', gas, r.gas.toFixed(2) + ' STT');
   $('c-gas').querySelector('.hint').hidden = gas || !r.granted; // dreamDEX sends the gas when the bot is added
+  if (r.granted && !gas) $('wait').textContent = 'Your bot is added and needs gas. This moves on by itself.';
   if (!r.granted || !gas) return;
   clearInterval(timer);
   $('wait').textContent = 'Your bot is ready.';
@@ -606,9 +621,10 @@ if (resume) toBot(resume.bot);
 ${clipJs}`, setup: true });
 }
 
-function shiftSetup(q) {
+async function shiftSetup(q) {
   const shift = { trader: isAddress(q.trader ?? '') ? getAddress(q.trader) : '', until: Number(q.until) || Date.now() + 8 * 3_600_000 };
   const covered = shift.trader ? who(shift.trader) : 'Preset: BTC trend';
+  const now = shift.trader ? await traderNow(shift.trader).catch(() => null) : null;
   return page('Set up your shift · Offshift', `
 <div class="wizard">
   <section class="wizard__step" id="s-wait"><h1 tabindex="-1">Checking your account</h1><p class="sub" role="status">Reading dreamDEX. This takes a moment.</p></section>
@@ -643,6 +659,7 @@ function shiftSetup(q) {
       <dl>
         <div class="row"><dt>Account</dt><dd id="r-account"></dd></div>
         <div class="row"><dt>Covered by</dt><dd>${covered}</dd></div>
+        ${now ? `<div class="row"><dt>Trader now</dt><dd>${now}</dd></div>` : ''}
         <div class="row"><dt>Until</dt><dd class="until-value">${time(shift.until, true)}</dd></div>
         <div class="row"><dt>Size per trade</dt><dd id="r-size"></dd></div>
         <div class="row"><dt>Stops at a loss of</dt><dd id="r-loss"></dd></div>
@@ -972,7 +989,7 @@ createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/shifts') return html(shiftsPage());
     if (req.method === 'GET' && url.pathname === '/accounts') return html(accountsPage());
     if (req.method === 'GET' && url.pathname === '/accounts/new') return html(accountSetup());
-    if (req.method === 'GET' && url.pathname === '/cover') return html(shiftSetup(Object.fromEntries(url.searchParams)));
+    if (req.method === 'GET' && url.pathname === '/cover') return html(await shiftSetup(Object.fromEntries(url.searchParams)));
     if (req.method === 'GET' && a === 'link' && isAddress(b ?? '') && store.bot(b)) return res.writeHead(302, { location: `/cover?account=${b}&${url.searchParams}` }).end();
     if (req.method === 'GET' && a === 'trader' && isAddress(b ?? '')) return html(await traderPage(b.toLowerCase()));
     if (req.method === 'GET' && a === 'shift' && store.sessionByLink(b ?? '')) return html(await shift(store.sessionByLink(b)));
