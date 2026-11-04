@@ -235,9 +235,9 @@ function page(title, body, { cls = 'shell page', live = false, script = '', at =
 ${FONTS.map((f) => `<link rel="preload" as="font" type="font/woff2" crossorigin href="${f}">`).join('')}
 <style>${css}</style></head><body>
 <a class="skip" href="#main">Skip to content</a>
-<header class="nav"><div class="shell nav__inner">${brand}<nav class="menu" aria-label="Main">${MENU.map(([href, label, svg]) => `<a href="${href}" aria-label="${label}" data-label="${label}"${href === at ? ' aria-current="page"' : ''}>${svg}</a>`).join('')}</nav>${setup ? '' : `<div class="nav__end">${chain}<a class="btn" href="/#cover">Cover my shift</a></div>`}</div></header>
+<header class="nav"><div class="shell nav__inner">${brand}<nav class="menu" aria-label="Main">${MENU.map(([href, label, svg]) => `<a href="${href}" aria-label="${label}" data-label="${label}"${href === at ? ' aria-current="page"' : ''}>${svg}<span class="menu__label" aria-hidden="true">${label}</span></a>`).join('')}</nav>${setup ? '' : `<div class="nav__end">${chain}${cls === 'home' ? '' : '<a class="btn" href="/#cover">Cover my shift</a>'}</div>`}</div></header>
 <main id="main" class="${cls}"${live ? ' data-live' : ''}>${body}</main>
-<footer class="shell foot"><span>Testnet money, not real. Copying can lose money.</span><span class="built">Built on <a href="${DREAMDEX_URL}">${LOGOS.dreamdex}</a><a href="https://somnia.network">${LOGOS.somnia}</a></span></footer>
+<footer class="shell foot"><span>Testnet money. Copying can lose money.</span><span class="built">Built on <a href="${DREAMDEX_URL}">${LOGOS.dreamdex}</a><a href="https://somnia.network">${LOGOS.somnia}</a></span></footer>
 <p class="vh" id="said" role="status"></p>
 <script>
 const localize = (root) => { for (const t of root.querySelectorAll('time')) t.textContent = new Date(t.dateTime).toLocaleString([], 'date' in t.dataset ? { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' } : { hour: '2-digit', minute: '2-digit' }); };
@@ -337,10 +337,10 @@ if (chart && !reduced) {
 function moments(s, evs) {
   const orders = filled(evs), last = orders.at(-1);
   const why = (e) => {
-    if (copied(e)) return `Somnia Reactivity reported the trader's move. Order placed ${copied(e)}&nbsp;s later.`;
-    if (e === last && e.at >= s.ends_at) return e.position === '0' ? 'End time reached. Position closed, account flat.' : 'End time reached.';
-    if (evs[evs.indexOf(e) - 1]?.kind === 'no-fill') return 'Nothing to match within 0.5% of the mark at first. Filled on a retry.';
-    return e.position === '0' ? "Copied the trader's close." : "Copied the trader's new position at the shift's size.";
+    if (copied(e)) return `Copied ${copied(e)}&nbsp;s after the trader.`;
+    if (e === last && e.at >= s.ends_at) return e.position === '0' ? 'End time. Closed flat.' : 'End time.';
+    if (evs[evs.indexOf(e) - 1]?.kind === 'no-fill') return 'Filled on a retry, within 0.5% of the mark.';
+    return e.position === '0' ? "Copied the trader’s close." : "Copied the trader’s entry.";
   };
   return orders.map((e, i) => `<li data-n="${i + 1}"><i class="mark ${e.side}">${i + 1}</i><h3>${side(e)} ${btc(e.quantity)} ${tok('BTC')}</h3><p>${why(e)}</p></li>`).slice(-4).join('');
 }
@@ -350,13 +350,13 @@ function handover(s, evs) {
   const orders = filled(evs), pnl = finals.get(s.id), candles = charts.get(s.id), flat = evs.at(-1).position === '0';
   const mins = Math.round((shiftEnd(s, evs) - s.created_at) / 60000);
   return `<section class="shell panel" aria-labelledby="shown">
-<header class="lede"><h2 class="section__title" id="shown">What you get back</h2><p class="sub">Shift #${s.id}, covered by ${s.trader ? who(s.trader) : 'the preset BTC trend'}${flat ? ', ended flat' : ''}</p></header>
+<header class="lede"><h2 class="section__title" id="shown">What you get back</h2><p class="sub">Shift #${s.id}, covered by ${s.trader ? who(s.trader) : 'Preset: BTC trend'}</p></header>
 <div class="log">
 <ol class="moments">${moments(s, evs)}</ol>
 <div class="log__main"><p class="outcome">${pnl === undefined ? '' : `<b class="${tone(pnl)}">${usd(pnl)} ${tok('USDso')}</b>`}<span>${orders.length} orders in ${mins} minutes</span></p>
 ${timeline(s, evs, candles)}</div>
 </div>
-<footer class="run-foot"><a class="quiet" href="/shift/${s.link}">View the full shift</a>${candles?.length > 1 ? '<button class="copy" id="replay" type="button">Replay this shift</button>' : ''}${tally ? `<span>Real orders on Somnia Tokyo testnet. <a class="quiet" href="/traders">Traders</a> ranks ${tally.closes.toLocaleString('en-US')} closes by ${tally.traders.toLocaleString('en-US')} traders.</span>` : ''}</footer>
+<footer class="run-foot"><a class="quiet" href="/shift/${s.link}">View the full shift</a>${candles?.length > 1 ? '<button class="copy" id="replay" type="button">Replay</button>' : ''}</footer>
 </section>`;
 }
 
@@ -364,31 +364,28 @@ const DREAMDEX = `<a class="quiet" href="${DREAMDEX_URL}">dreamDEX</a>`;
 
 function howPage() {
   return page('How it works · Offshift', `
-<header class="lede"><h1>How it works</h1><p class="sub">No sign-up, and your money stays on dreamDEX.</p></header>
+<header class="lede"><h1>How it works</h1></header>
 <div class="how">
-  <div><h2>Add a bot on dreamDEX</h2><p>There's no login. Paste your dreamDEX wallet address and Offshift makes a bot for it. You add that bot in dreamDEX's Link a bot screen, which can send it gas in the same step.</p></div>
+  <div><h2>Add a bot on dreamDEX</h2><p>Paste your dreamDEX wallet address and Offshift makes a bot for it. You add the bot in dreamDEX’s Link a bot screen.</p></div>
   <div class="art"><dl class="sheet"><div><dt>Place orders</dt><dd>Yes</dd></div><div><dt>Cancel orders</dt><dd>Yes</dd></div><div><dt>Withdraw</dt><dd>Never</dd></div></dl></div>
 </div>
 <div class="how flip">
-  <div><h2>Keep your money on dreamDEX</h2><p>Deposit and withdraw on ${DREAMDEX}, as you do now. Offshift never holds your USDso. A shift needs 5 USDso in your perps account and about 0.5 STT on the bot for gas.</p></div>
+  <div><h2>Keep your money on dreamDEX</h2><p>A shift needs 5 ${tok('USDso')} in your perps account on ${DREAMDEX} and 1 ${tok('STT')} on the bot for gas.</p></div>
   <div class="art art--warm"><dl class="sheet"><div><dt>Deposits</dt><dd>On dreamDEX</dd></div><div><dt>Withdrawals</dt><dd>On dreamDEX</dd></div><div><dt>USDso held by Offshift</dt><dd>None</dd></div></dl></div>
 </div>
 <div class="how">
-  <div><h2>Offshift copies the trader until your end time</h2><p>Somnia Reactivity reports each move and Offshift places the same trade at your size. It stops at your loss limit, closes you out at the end time and lists every order on the shift page.</p></div>
+  <div><h2>Offshift copies the trader until your end time</h2><p>Somnia Reactivity reports each move. Offshift stops early at your loss limit and lists every order on the shift page.</p></div>
   <div class="art art--cool"><ol class="timeline"><li><span>Trader</span>Opens a position</li><li><span>Offshift</span>Copies it at your size</li><li class="gold"><strong>End time</strong>Closes you out, flat</li></ol></div>
 </div>
 <section class="panel faq" id="faq" aria-labelledby="faq-title">
 <header class="lede"><h2 class="section__title" id="faq-title">Frequently asked questions</h2></header>
-<details><summary>Do I need to log in or connect a wallet?</summary><p>No. Your dreamDEX address is public, so that's all Offshift asks for, and it never asks for a private key. The browser you start from keeps the bot's secret, so only that browser can start or end its shifts.</p></details>
-<details><summary>What is an Offshift account?</summary><p>A name for one dreamDEX wallet and its bot, saved in this browser. There's no password, and you can add as many as you like. Clearing this browser's data forgets them, so you'd add the wallet again.</p></details>
-<details><summary>Who can see my shifts?</summary><p>The Shifts page lists only the shifts from accounts saved in your browser. Each shift's page has a private link that can't be guessed, so only people you send it to can open it. The orders themselves are public on chain.</p></details>
-<details><summary>Which dreamDEX wallet can I use?</summary><p>A Somnia Account wallet. dreamDEX's Legacy Account can't link bots.</p></details>
-<details><summary>Why does dreamDEX say "Can't add a bot yet"?</summary><p>Your dreamDEX wallet has a small app key that pays for changes like adding a bot, and it has run out of STT. Click the gas warning in your wallet, copy the key and send it a little STT, then press Add bot again.</p></details>
-<details><summary>How do I deposit or withdraw?</summary><p>On ${DREAMDEX}. Your USDso stays in your dreamDEX perps account the whole time, so there's nothing to deposit here. You withdraw there too, and the bot never can.</p></details>
-<details><summary>Does Offshift work directly with dreamDEX?</summary><p>Yes. Orders go straight to dreamDEX's BTC perp market on Somnia Tokyo testnet from the bot you added, and the position sits in your own account.</p></details>
-<details><summary>What can I see before I pick a trader?</summary><p>For BTC over the last 7 days: realized PnL and its curve, open PnL, win rate, max drawdown and number of closes. Market makers and records under 10 closes or 2 days are left out. Open a trader for every pair they trade, their PnL with funding, open positions, when they're active and an estimate of what following them on BTC would have made.</p></details>
-<details><summary>What happens at the end time?</summary><p>Offshift closes the position and you're flat. That only works while Offshift is running. If it stops with a position still open, the shift page says so and links to dreamDEX so you can close it yourself.</p></details>
-<details><summary>Can I lose money?</summary><p>Yes. Copying can lose money, and the loss limit ends a shift early but can't promise an exact exit. Offshift runs on testnet money for now.</p></details>
+<details><summary>Do I need to log in or connect a wallet?</summary><p>No. Offshift only asks for your public dreamDEX address. The browser you start from keeps the bot’s secret, so only it can start or end shifts.</p></details>
+<details><summary>What is an Offshift account?</summary><p>A dreamDEX wallet and its bot, saved in this browser. Clearing browser data forgets it.</p></details>
+<details><summary>Who can see my shifts?</summary><p>The Shifts page lists only the shifts from accounts saved in your browser. Each shift’s page has a private link that can’t be guessed, so only people you send it to can open it. The orders themselves are public on chain.</p></details>
+<details><summary>Which dreamDEX wallet can I use?</summary><p>A Somnia Account wallet. dreamDEX’s Legacy Account can’t link bots.</p></details>
+<details><summary>Why does dreamDEX say “Can’t add a bot yet”?</summary><p>Your dreamDEX wallet has a small app key that pays for changes like adding a bot, and it has run out of STT. Click the gas warning in your wallet, copy the key and send it a little STT, then press Add bot again.</p></details>
+<details><summary>What happens at the end time?</summary><p>Offshift closes the position and you’re flat. That only works while Offshift is running. If it stops with a position still open, the shift page says so and links to dreamDEX so you can close it yourself.</p></details>
+<details><summary>Can I lose money?</summary><p>Yes. The loss limit ends a shift early but can’t promise an exact exit.</p></details>
 </section>`, { at: '/how' });
 }
 
@@ -405,7 +402,7 @@ function home(selected) {
     <input type="hidden" name="trader" value="${esc(chosen?.account ?? '')}"><input type="hidden" name="until" id="end">
     <div class="choice">
       <span class="choice__label">Trader</span>
-      ${chosen ? `<div class="choice__who">${who(chosen.account)}</div><div class="choice__foot">${chosen.pnl === null ? '<span></span>' : `<span class="num ${tone(chosen.pnl)}">${usd(chosen.pnl).slice(0, -3)} ${tok('USDso')} in 7 days</span>`}<a class="quiet" href="/traders">Change trader</a></div>` : '<p class="sub">Loading the last 3 days of trades. This takes about 5 minutes on a first run.</p>'}
+      ${chosen ? `<div class="choice__who">${who(chosen.account)}</div><div class="choice__foot">${chosen.pnl === null ? '<span></span>' : `<span class="num ${tone(chosen.pnl)}">${usd(chosen.pnl).slice(0, -3)} ${tok('USDso')} in 7 days</span>`}<a class="quiet" href="/traders">Change trader</a></div>` : '<p class="sub">Loading traders. First run takes about 5 minutes.</p>'}
     </div>
     <div class="choice choice--time">
       <label class="choice__label" for="until">Cover until</label>
@@ -416,12 +413,9 @@ function home(selected) {
   </form>
   <ul class="strip">
     <li><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.500l5.500 2v4c0 3.400-2.300 5.700-5.500 7-3.200-1.300-5.500-3.600-5.500-7v-4l5.500-2z"/></svg>Your bot can never withdraw</li>
-    <li class="built">Built on ${LOGOS.dreamdex}${LOGOS.somnia}</li>
-    <li><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.500l3.200 3.200L13 4.500"/></svg>Every order on chain</li>
   </ul>
 </section>
-${shown ? handover(shown, shown.evs) : ''}
-<section class="close"><div class="band"><h2>Cover your next shift</h2><p>Set an end time and go offline.</p><a class="btn" href="#cover">Cover my shift</a></div></section>`, { cls: 'home', script: dial + HOME_SCRIPT });
+${shown ? handover(shown, shown.evs) : ''}`, { cls: 'home', script: dial + HOME_SCRIPT });
 }
 
 function tradersPage() {
@@ -431,11 +425,11 @@ function tradersPage() {
     return !o ? ['dim', '–'] : o.size === 0n ? ['dim', 'Flat'] : [tone(o.pnl), usd(o.pnl)];
   };
   return page('Traders · Offshift', `
-<header class="case-head"><div><h1>Traders</h1><p class="sub">Ranked by the last 7 days on BTC, the market Offshift copies. Open a trader for every pair they trade.</p></div></header>
+<header class="case-head"><div><h1>Traders</h1><p class="sub">${tok('BTC')}, last 7 days</p></div></header>
 ${rows.length ? `<div class="wrap"><table class="rows"><thead><tr><th class="opt"><span class="vh">Rank</span></th><th>Trader</th><th class="opt-lg"><span class="vh">Realized PnL curve</span></th><th class="num">${inUsd('Realized PnL')}</th><th class="num opt">${inUsd('Open PnL')}</th><th class="num opt-md">Win rate</th><th class="num opt-md">${inUsd('Max drawdown')}</th><th class="num opt-md">Closes</th><th class="num opt-md">Pairs</th><th class="num opt">Last move</th><th><span class="vh">Action</span></th></tr></thead><tbody>
-${rows.map((t, i) => { const [cls, now] = opened(t); return `<tr><td class="rank opt">${i + 1}</td><td><a class="go" href="/trader/${esc(t.account)}">${who(t.account)}</a></td><td class="opt-lg">${curve(t.pnls, 132, 28)}</td><td class="num pnl ${tone(t.pnl)}">${usd(t.pnl)}<small class="on-phone ${cls}">Open: ${now}</small></td><td class="num opt ${cls}">${now}</td><td class="num opt-md">${Math.round(t.winRate * 100)}%</td><td class="num opt-md">${usd(-t.drawdown)}</td><td class="num opt-md">${t.closes}</td><td class="num opt-md">${histories.has(t.account) ? new Set(histories.get(t.account).rows.map((c) => c.pool)).size : '–'}</td><td class="num opt dim">${ago(lastMove(t.account, histories.get(t.account)?.rows.at(-1)?.timestamp ?? t.last))}</td><td class="num"><a class="choose" href="/?trader=${esc(t.account)}" aria-label="Pick ${esc(short(t.account))}">Pick</a></td></tr>`; }).join('')}
-</tbody></table></div><p class="fine">Win rate and drawdown count closed trades only, so read them beside open PnL. Market makers and records under 10 closes or 2 days are left out.</p>`
-    : '<p class="empty">Loading the last 3 days of trades from the indexer. This takes about 5 minutes on a first run.</p>'}`, { at: '/traders' });
+${rows.map((t, i) => { const [cls, now] = opened(t); return `<tr><td class="rank opt">${i + 1}</td><td><a class="go" href="/trader/${esc(t.account)}">${who(t.account)}</a></td><td class="opt-lg">${curve(t.pnls, 132, 28)}</td><td class="num pnl ${tone(t.pnl)}">${usd(t.pnl)}<small class="on-phone ${cls}">Open: ${now}</small></td><td class="num opt ${cls}">${now}</td><td class="num opt-md">${Math.round(t.winRate * 100)}%</td><td class="num opt-md">${usd(-t.drawdown)}</td><td class="num opt-md">${t.closes}</td><td class="num opt-md">${histories.has(t.account) ? new Set(histories.get(t.account).rows.map((c) => c.pool)).size : '–'}</td><td class="num opt dim">${ago(lastMove(t.account, histories.get(t.account)?.rows.at(-1)?.timestamp ?? t.last))}</td><td class="num"><a class="choose" href="/cover?trader=${esc(t.account)}" aria-label="Pick ${esc(short(t.account))}">Pick</a></td></tr>`; }).join('')}
+</tbody></table></div><p class="fine">Market makers and records under 10 closes or 2 days are left out.</p>`
+    : '<p class="empty">Loading traders. First run takes about 5 minutes.</p>'}`, { at: '/traders' });
 }
 
 // Shifts belong to whoever holds their bot's secret. There is no sign-in, so that secret is the proof:
@@ -451,7 +445,7 @@ ${shifts.map((s) => { const pnl = finals.get(s.id); return `<tr><td><a class="go
 
 function shiftsPage() {
   return page('Shifts · Offshift', `
-<header class="case-head"><div><h1>Shifts</h1><p class="sub">Shifts from the accounts saved in this browser.</p></div></header>
+<header class="case-head"><div><h1>Shifts</h1><p class="sub">In this browser</p></div></header>
 <div id="list"><p class="sub" role="status">Loading your shifts</p></div>
 <div class="empty" id="none" hidden><p>No shifts in this browser yet.</p><a class="btn" href="/#cover">Cover my shift</a></div>`, { at: '/shifts', script: `
 const list = document.getElementById('list'), none = document.getElementById('none');
@@ -518,7 +512,7 @@ const clip = (name) => {
 
 function accountsPage() {
   return page('Accounts · Offshift', `
-<header class="case-head"><div><h1>Accounts</h1><p class="sub">Each one is a dreamDEX wallet and its bot, saved in this browser.</p></div><a class="btn" href="/accounts/new">Add account</a></header>
+<header class="case-head"><div><h1>Accounts</h1></div><a class="btn" href="/accounts/new">Add account</a></header>
 <ul class="accounts" id="list"></ul>
 <div class="empty" id="none" hidden><p>No accounts yet.</p><a class="btn" href="/accounts/new">Add account</a></div>`, { at: '/accounts', script: `${STEPS_JS}
 const list = accounts(), box = $('list');
@@ -539,7 +533,7 @@ function draw() {
     };
     readBot(a.bot).then((r) => {
       const state = row.querySelector('[data-state]'), go = row.querySelector('[data-go]');
-      if (!r) return (state.textContent = 'Could not read dreamDEX');
+      if (!r) return (state.textContent = 'Unable to read dreamDEX. Reload to retry.');
       if (!r.granted) {
         state.textContent = 'Bot not added yet';
         go.textContent = 'Finish setup';
@@ -559,9 +553,8 @@ function accountSetup() {
   return page('Add an account · Offshift', `
 <div class="wizard">
   <form class="wizard__step" id="s-wallet" novalidate>
-    <p class="wizard__count">Step 1 of 2</p>
     <h1 tabindex="-1">Add your dreamDEX wallet</h1>
-    <p class="sub">Open your wallet at the top right of <a class="quiet" href="${DREAMDEX_URL}" target="_blank" rel="noopener">dreamDEX</a> and copy its address.</p>
+    <p class="sub">Copy your address from <a class="quiet" href="${DREAMDEX_URL}" target="_blank" rel="noopener">dreamDEX</a>.</p>
     ${clip('wallet')}
     <div class="wizard__body">
       <label for="name">Account name</label><input id="name" placeholder="Night shifts" autocomplete="off" maxlength="40">
@@ -571,9 +564,8 @@ function accountSetup() {
     <div class="wizard__foot"><span></span><button class="btn">Continue</button></div>
   </form>
   <section class="wizard__step" id="s-bot" hidden>
-    <p class="wizard__count">Step 2 of 2</p>
     <h1 tabindex="-1">Add your bot on dreamDEX</h1>
-    <p class="sub">In your dreamDEX wallet, choose Link a bot, paste this address and press Add bot. Leave Perps on. If your wallet has no STT, turn the gas option off.</p>
+    <p class="sub">Leave Perps on. If your wallet has no STT, turn the gas option off.</p>
     ${clip('bot')}
     <div class="wizard__body">
       <div class="addr"><code id="bot-address"></code></div>
@@ -583,12 +575,12 @@ function accountSetup() {
         <div id="c-gas"><dt>Bot gas</dt><dd class="state">Checking</dd><dd class="hint" hidden>Send this address 1 STT from any wallet.</dd></div>
       </dl>
     </div>
-    <p class="sub" id="wait" role="status">Waiting for your bot to be added. This moves on by itself.</p>
-    <details class="stuck"><summary>dreamDEX says "Can't add a bot yet"?</summary>
-      <p class="sub">Your dreamDEX wallet has a small app key that pays for changes like this one. If it has no STT, send it a little from your wallet, then press Add bot again.</p>
+    <p class="sub" id="wait" role="status">This page moves on once the bot is added.</p>
+    <details class="stuck"><summary>dreamDEX says “Can’t add a bot yet”?</summary>
+      <p class="sub">Send your dreamDEX app key a little STT, then press Add bot again.</p>
       ${clip('gas')}
     </details>
-    <p class="fine">Legacy accounts can't link bots, so pick a Somnia Account wallet. <a class="quiet" href="${DREAMDEX_URL}/docs/trading/common/link-a-bot" target="_blank" rel="noopener">See dreamDEX's guide</a></p>
+    <p class="fine">Legacy accounts can’t link bots, so pick a Somnia Account wallet. <a class="quiet" href="${DREAMDEX_URL}/docs/trading/common/link-a-bot" target="_blank" rel="noopener">See dreamDEX’s guide</a></p>
   </section>
 </div>`, { script: `${STEPS_JS}
 const params = new URLSearchParams(location.search), next = safeNext(params.get('next'));
@@ -601,7 +593,7 @@ async function check() {
   set('c-grant', r.granted, r.granted ? 'Added' : 'Waiting for dreamDEX');
   set('c-gas', gas, r.gas.toFixed(2) + ' STT');
   $('c-gas').querySelector('.hint').hidden = gas || !r.granted; // dreamDEX sends the gas when the bot is added
-  if (r.granted && !gas) $('wait').textContent = 'Your bot is added and needs gas. This moves on by itself.';
+  if (r.granted && !gas) $('wait').textContent = 'Your bot needs gas.';
   if (!r.granted || !gas) return;
   clearInterval(timer);
   $('wait').textContent = 'Your bot is ready.';
@@ -639,23 +631,24 @@ ${clipJs}`, setup: true });
 
 async function shiftSetup(q) {
   const shift = { trader: isAddress(q.trader ?? '') ? getAddress(q.trader) : '', until: Number(q.until) || Date.now() + 8 * 3_600_000 };
+  const pickEnd = !(Number(q.until) > Date.now()); // the home page sets the end time; a trader page's Pick does not
   const covered = shift.trader ? who(shift.trader) : 'Preset: BTC trend';
   const now = shift.trader ? await traderNow(shift.trader).catch(() => null) : null;
   return page('Set up your shift · Offshift', `
 <div class="wizard">
-  <section class="wizard__step" id="s-wait"><h1 tabindex="-1">Checking your account</h1><p class="sub" role="status">Reading dreamDEX. This takes a moment.</p></section>
+  <section class="wizard__step" id="s-wait"><h1 tabindex="-1" role="status">Checking your account</h1></section>
   <section class="wizard__step" id="s-account" hidden>
-    <h1 tabindex="-1">Which account is this shift for?</h1>
+    <h1 tabindex="-1">${shift.trader ? `Which account follows ${who(shift.trader)}?` : 'Which account is this shift for?'}</h1>
     <ul class="choices" id="choices"></ul>
-    <div class="wizard__foot"><span></span><a class="quiet" href="/accounts/new?next=${esc(encodeURIComponent(`/cover?trader=${shift.trader}&until=${shift.until}`))}">Add another account</a></div>
+    <div class="wizard__foot"><span></span><a class="quiet" href="/accounts/new?next=${esc(encodeURIComponent(`/cover?trader=${shift.trader}${pickEnd ? '' : `&until=${shift.until}`}`))}">Add another account</a></div>
   </section>
   <form class="wizard__step" id="s-size" hidden novalidate>
-    <p class="wizard__count">Step 1 of 2</p>
-    <h1 tabindex="-1">Set your size and loss limit</h1>
+    <h1 tabindex="-1">${pickEnd ? 'Set your shift' : 'Set your size and loss limit'}</h1>
     <div class="wizard__body">
+      ${pickEnd ? `<div><label for="hours">End time</label><select id="hours">${[1, 2, 4, 8, 12].map((h) => `<option value="${h}"${h === 8 ? ' selected' : ''}>In ${h} h</option>`).join('')}</select></div>` : ''}
       <div class="two">
-        <div><label for="size">Size per trade</label><div class="unit"><input id="size" type="number" inputmode="numeric" min="5" max="1000" step="1" value="${Number(q.size) || FOLLOW_SIZE}" required><span>${tok('USDso')}</span></div></div>
-        <div><label for="loss">Stop if it loses</label><div class="unit"><input id="loss" type="number" inputmode="numeric" min="1" step="1" value="${Number(q.loss) || 5}" required><span>${tok('USDso')}</span></div></div>
+        <div><label for="size">Size per trade</label><div class="unit"><input id="size" aria-describedby="size-err" type="number" inputmode="numeric" min="5" max="1000" step="1" value="${Number(q.size) || FOLLOW_SIZE}" required><span>${tok('USDso')}</span></div></div>
+        <div><label for="loss">Loss limit</label><div class="unit"><input id="loss" aria-describedby="size-err" type="number" inputmode="numeric" min="1" step="1" value="${Number(q.loss) || 5}" required><span>${tok('USDso')}</span></div></div>
       </div>
       <p class="err" id="size-err" role="alert"></p>
     </div>
@@ -663,27 +656,26 @@ async function shiftSetup(q) {
   </form>
   <section class="wizard__step" id="s-deposit" hidden>
     <h1 tabindex="-1">Add margin on dreamDEX</h1>
-    <p class="sub">This shift needs ${MIN_MARGIN} USDso in your perps account. Deposit on dreamDEX, and this moves on by itself.</p>
+    <p class="sub">Needs ${MIN_MARGIN} ${tok('USDso')} in your perps account. This page moves on once it arrives.</p>
     ${clip('deposit')}
     <div class="wizard__body"><dl class="sheet checks"><div><dt>Perps margin</dt><dd class="state" id="margin">Checking</dd></div></dl>
     <a class="btn" href="${DREAMDEX_URL}" target="_blank" rel="noopener">Open dreamDEX</a></div>
   </section>
   <section class="wizard__step" id="s-review" hidden>
-    <p class="wizard__count">Step 2 of 2</p>
     <h1 tabindex="-1">Review and start</h1>
     <div class="wizard__body wizard__body--teal">
       <dl>
         <div class="row"><dt>Account</dt><dd id="r-account"></dd></div>
         <div class="row"><dt>Covered by</dt><dd>${covered}</dd></div>
         ${now ? `<div class="row"><dt>Trader now</dt><dd>${now}</dd></div>` : ''}
-        <div class="row"><dt>Until</dt><dd class="until-value">${time(shift.until, true)}</dd></div>
+        <div class="row"><dt>End time</dt><dd class="until-value" id="r-until">${time(shift.until, true)}</dd></div>
         <div class="row"><dt>Size per trade</dt><dd id="r-size"></dd></div>
-        <div class="row"><dt>Stops at a loss of</dt><dd id="r-loss"></dd></div>
+        <div class="row"><dt>Loss limit</dt><dd id="r-loss"></dd></div>
       </dl>
     </div>
     <p id="err" class="err" role="alert"></p>
     <div class="wizard__foot"><button class="link" type="button" id="back">Back</button><button class="btn" id="go">Start shift</button></div>
-    <p class="fine">Your bot can place orders but can never withdraw. Copying can lose money, and exits run only while Offshift runs.</p>
+    <p class="fine">Exits run only while Offshift runs.</p>
   </section>
 </div>`, { script: `${STEPS_JS}
 const q = ${js(shift)}, params = new URLSearchParams(location.search), here = location.pathname + location.search;
@@ -693,6 +685,10 @@ const review = () => {
   $('r-account').textContent = account.name;
   $('r-size').textContent = $('size').value + ' USDso';
   $('r-loss').textContent = $('loss').value + ' USDso';
+  if ($('hours')) {
+    q.until = Date.now() + $('hours').value * 3_600_000;
+    $('r-until').textContent = new Date(q.until).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
   showStep('s-review');
 };
 async function waitForMargin() {
@@ -713,8 +709,10 @@ async function useAccount(a) {
 $('s-size').addEventListener('submit', (ev) => {
   ev.preventDefault();
   const size = Number($('size').value), loss = Number($('loss').value);
-  $('size-err').textContent = !(size >= 5 && size <= 1000) ? 'Set a size between 5 and 1,000 USDso.' : !(loss >= 1) ? 'Set a loss limit of at least 1 USDso.' : '';
-  if ($('size-err').textContent) return;
+  const bad = !(size >= 5 && size <= 1000) ? 'size' : !(loss >= 1) ? 'loss' : '';
+  $('size-err').textContent = bad === 'size' ? 'Set a size between 5 and 1,000 USDso.' : bad === 'loss' ? 'Set a loss limit of at least 1 USDso.' : '';
+  for (const id of ['size', 'loss']) $(id).toggleAttribute('aria-invalid', id === bad);
+  if (bad) return $(bad).focus();
   if (account.margin >= ${MIN_MARGIN}) return review();
   $('margin').textContent = account.margin.toFixed(2) + ' USDso';
   showStep('s-deposit');
@@ -786,23 +784,22 @@ async function shift(s) {
   const address = (label, a) => `<div class="row"><dt>${label}</dt><dd>${esc(a)}</dd><button class="copy" type="button" data-copy="${esc(a)}">Copy</button></div>`;
   const value = (label, v) => `<div class="row"><dt>${label}</dt><dd>${v}</dd></div>`;
   return page(`${title} · Offshift`, `
-<div class="case-top">${status(s.status)}<span class="dim">${s.trader ? 'Follow a trader' : 'Preset strategy'} · ${tok('BTC')} perp</span></div>
 <header class="case-head">
-  <div><h1>${esc(title)}</h1><p class="sub">${closing ? 'Closing out.' : running ? `Ends ${time(s.ends_at)}.` : esc(s.reason ?? 'Ended at its end time, flat.')}${abandoned ? ' Offshift has stopped, so close the remaining position on <a class="quiet" href="https://app.testnet.dreamdex.io">dreamDEX</a>.' : ''}</p></div>
-  <div id="owner" hidden>${closing ? '' : running ? '<button class="btn btn--secondary" id="stop">End shift now</button>' : `<a class="btn" href="/link/${esc(s.bot)}?${esc(again)}">Run again</a>`}</div>
+  <div><h1>${esc(title)}</h1><p class="sub">${status(s.status)} · ${tok('BTC')} perp${closing ? ' · Closing out.' : s.reason ? ` · ${esc(s.reason)}` : ''}${abandoned ? ' Offshift has stopped, so close the remaining position on <a class="quiet" href="https://app.testnet.dreamdex.io">dreamDEX</a>.' : ''}</p></div>
+  <div id="owner" hidden>${closing ? '' : running ? '<button class="btn btn--secondary" id="stop">End shift and close position</button>' : `<a class="btn" href="/link/${esc(s.bot)}?${esc(again)}">Run again</a>`}</div>
 </header>
 <dl class="cells">
-  <div class="cell"><dt class="cell__q">${running ? 'What is it making?' : 'What did it make?'}</dt><dd class="cell__a big ${tone(pnl)}">${pnl === null ? '–' : usd(pnl)}</dd><dd class="cell__note">${tok('USDso')}, ${running ? 'realized plus open' : 'realized'}</dd><dd><span class="prov prov--read">Indexer</span></dd></div>
-  <div class="cell"><dt class="cell__q">Where is the account?</dt><dd class="cell__a">${size === null ? '–' : held(size, true)}</dd>${running ? '<dd class="cell__note">Read from chain just now</dd><dd><span class="prov prov--live">Live</span></dd>' : ordered ? '<dd class="cell__note">After the last order</dd><dd><span class="prov prov--receipt">On chain</span></dd>' : ''}</div>
-  <div class="cell"><dt class="cell__q">How many orders?</dt><dd class="cell__a">${filled(evs).length}</dd>${ordered ? '<dd class="cell__note">Listed below</dd><dd><span class="prov prov--receipt">On chain</span></dd>' : ''}</div>
-  <div class="cell"><dt class="cell__q">How much time remains?</dt><dd class="cell__a">${closing ? 'Closing out' : running ? `<span id="left" data-end="${s.ends_at}"></span>` : 'None'}</dd><dd class="cell__note">${running ? 'Ends' : 'Ended'} ${time(s.ends_at)}</dd><dd><span class="prov">Set by the owner</span></dd></div>
+  <div class="cell"><dt class="cell__q">PnL</dt><dd class="cell__a big ${tone(pnl)}">${pnl === null ? '–' : usd(pnl)}</dd><dd class="cell__note">${tok('USDso')}, ${running ? 'realized plus open' : 'realized'}</dd><dd><span class="prov prov--read">Indexer</span></dd></div>
+  <div class="cell"><dt class="cell__q">Position</dt><dd class="cell__a">${size === null ? '–' : held(size, true)}</dd>${running ? '<dd><span class="prov prov--live">Live</span></dd>' : ordered ? '<dd><span class="prov prov--receipt">On chain</span></dd>' : ''}</div>
+  <div class="cell"><dt class="cell__q">Orders</dt><dd class="cell__a">${filled(evs).length}</dd>${ordered ? '<dd><span class="prov prov--receipt">On chain</span></dd>' : ''}</div>
+  <div class="cell"><dt class="cell__q">${running ? 'Time left' : 'Ended'}</dt><dd class="cell__a">${closing ? 'Closing out' : running ? `<span id="left" data-end="${s.ends_at}"></span>` : time(s.ends_at)}</dd>${running ? `<dd class="cell__note">Ends ${time(s.ends_at)}</dd>` : ''}<dd><span class="prov">Set by the owner</span></dd></div>
 </dl>
 ${timeline(s, evs, candles)}
 <section class="panel">
   <div class="panel__head"><h2 class="section__title">Details</h2></div>
   <dl class="fields">
-    ${s.trader ? address('Covered by', s.trader) : value('Covered by', 'Preset BTC trend')}${address('Account', s.owner)}
-    ${address('Bot', s.bot)}${value('Cover until', time(s.ends_at, true))}
+    ${s.trader ? address('Covered by', s.trader) : value('Covered by', 'Preset: BTC trend')}${address('Account', s.owner)}
+    ${address('Bot', s.bot)}${value('End time', time(s.ends_at, true))}
     ${value('Size per trade', `${esc(s.notional)} ${tok('USDso')}`)}${value('Loss limit', s.max_loss ? `${esc(s.max_loss)} ${tok('USDso')}` : 'None')}
   </dl>
 </section>
@@ -810,8 +807,8 @@ ${timeline(s, evs, candles)}
   <div class="panel__head"><h2 class="section__title">Activity</h2>${evs.some((e) => e.tx) ? '<span class="prov prov--receipt">On chain</span>' : ''}</div>
   ${evs.length ? `<div class="wrap"><table class="events"><thead><tr><th>Time</th><th>Event</th><th class="num opt">${tok('BTC')}</th><th>Transaction</th></tr></thead><tbody>
 ${evs.map((e) => `<tr data-ev="${e.id}"><td>${time(e.at)}</td><td class="ev"><span class="ev-line">${numbers.has(e.id) ? `<i class="mark ${e.side}">${numbers.get(e.id)}</i>` : ''}${word(e)}</span>${e.note ? `<small>${esc(e.note)}</small>` : ''}</td><td class="num opt">${e.quantity ? btc(e.quantity) : ''}</td><td class="tx">${e.tx ? `${esc(short(e.tx))} <button class="copy" type="button" data-copy="${esc(e.tx)}">Copy</button><small>${chain(e)}</small>` : ''}</td></tr>`).join('')}
-</tbody></table></div>${evs.some((e) => e.tx) ? '<p class="fine">Each transaction was read back from the Somnia Tokyo testnet RPC when this page loaded.</p>' : ''}`
-    : `<p class="empty">${running ? `Nothing yet. ${s.trader ? "The shift copies the trader's next move within seconds." : 'The strategy checks the trend every minute.'}` : 'No orders were placed.'}</p>`}
+</tbody></table></div>${evs.some((e) => e.tx) ? '' : ''}`
+    : `<p class="empty">${running ? (s.trader ? 'Waiting for the trader’s next move.' : 'Checks the trend every minute.') : 'No orders were placed.'}</p>`}
 </section>`, { live: running, script: `
 const secret = localStorage.getItem('offshift:bot:' + ${js(s.bot)});
 const main = () => document.querySelector('main');
@@ -843,6 +840,7 @@ let timer = 'live' in main().dataset ? setTimeout(refresh, 5000) : 0;
 reveal(); count(); setInterval(count, 1000);
 document.addEventListener('click', async (ev) => {
   if (!ev.target.closest('#stop')) return;
+  if (!confirm('End this shift now? Offshift closes your position at market.')) return;
   ev.target.disabled = true;
   await fetch('/api/shifts/${s.id}/stop', { method: 'POST', body: JSON.stringify({ secret }) });
   refresh();
@@ -878,32 +876,31 @@ async function traderPage(account) {
   const side = (units) => `${units > 0n ? 'Long' : 'Short'}`;
   const now = positions.length === 0 ? 'Flat' : positions.length === 1 ? `${side(positions[0].size)} ${tok(pairName(positions[0].pool))}` : `${positions.length} positions`;
   const move = lastMove(account, stats.last || r.last), live = move === moved.get(account);
-  const cover = `/?trader=${esc(account)}`, title = `Trader ${short(account)}`;
+  const cover = `/cover?trader=${esc(account)}`, title = `Trader ${short(account)}`;
   const line = (label, value) => `<div><dt>${label}</dt><dd class="${tone(value)}">${usd(value)}</dd></div>`;
   return page(`${title} · Offshift`, `
-<div class="case-top"><span class="dim">All perps, last 7 days</span></div>
 <header class="case-head">
   <div><h1>${who(account).replace('class="who"', 'class="who who--big"')}</h1><div class="addr"><code>${esc(account)}</code><button class="copy" type="button" data-copy="${esc(account)}">Copy</button></div></div>
   <a class="btn" href="${cover}">Pick this trader</a>
 </header>
 <dl class="cells">
-  <div class="cell"><dt class="cell__q">What did they make?</dt><dd class="cell__a big ${tone(made)}">${usd(made)}</dd><dd class="cell__note">${tok('USDso')}, realized${h ? ' on all pairs' : ` on ${tok('BTC')}`}</dd><dd><span class="prov prov--read">Indexer</span></dd></div>
-  <div class="cell"><dt class="cell__q">Where are they now?</dt><dd class="cell__a">${h ? now : '–'}</dd><dd class="cell__note ${tone(openTotal)}">${h ? (positions.length ? `${usd(openTotal)} ${tok('USDso')} open` : 'No open positions') : 'Reload to retry'}</dd><dd><span class="prov prov--read">Indexer</span></dd></div>
-  <div class="cell"><dt class="cell__q">How often do they win?</dt><dd class="cell__a">${count ? `${Math.round((wins / count) * 100)}%` : '–'}</dd><dd class="cell__note">${wins} of ${count} closes</dd><dd><span class="prov prov--read">Indexer</span></dd></div>
-  <div class="cell"><dt class="cell__q">What was their worst close?</dt><dd class="cell__a ${tone(loss ?? 0)}">${loss === null ? (h ? 'No losses' : '–') : usd(loss)}</dd>${loss === null ? '' : `<dd class="cell__note">${tok('USDso')} on ${tok(pairName(worst.pool))}, ${time(Number(worst.at) * 1000, true)}</dd>`}<dd><span class="prov prov--read">Indexer</span></dd></div>
+  <div class="cell"><dt class="cell__q">Realized PnL</dt><dd class="cell__a big ${tone(made)}">${usd(made)}</dd><dd class="cell__note">${tok('USDso')}, ${h ? 'all pairs' : tok('BTC')}, 7 days</dd><dd><span class="prov prov--read">Indexer</span></dd></div>
+  <div class="cell"><dt class="cell__q">Position</dt><dd class="cell__a">${h ? now : '–'}</dd>${h && !positions.length ? '' : `<dd class="cell__note ${tone(openTotal)}">${h ? `${usd(openTotal)} ${tok('USDso')} open` : 'Reload to retry'}</dd>`}<dd><span class="prov prov--read">Indexer</span></dd></div>
+  <div class="cell"><dt class="cell__q">Win rate</dt><dd class="cell__a">${count ? `${Math.round((wins / count) * 100)}%` : '–'}</dd><dd class="cell__note">${wins} of ${count} closes</dd><dd><span class="prov prov--read">Indexer</span></dd></div>
+  <div class="cell"><dt class="cell__q">Worst close</dt><dd class="cell__a ${tone(loss ?? 0)}">${loss === null ? (h ? 'No losses' : '–') : usd(loss)}</dd>${loss === null ? '' : `<dd class="cell__note">${tok('USDso')} on ${tok(pairName(worst.pool))}, ${time(Number(worst.at) * 1000, true)}</dd>`}<dd><span class="prov prov--read">Indexer</span></dd></div>
 </dl>
 <section class="follow" aria-labelledby="follow-title">
-  <div class="panel__head"><h2 class="section__title" id="follow-title">If you had followed them on BTC</h2><span class="prov">Estimate</span></div>
+  <div class="panel__head"><h2 class="section__title" id="follow-title">Copying them on BTC</h2><span class="prov">Estimate</span></div>
   ${follow ? `<p class="outcome"><b class="${tone(follow.pnl)}">${usd(follow.pnl)} ${tok('USDso')}</b><span>at ${FOLLOW_SIZE} ${tok('USDso')} a trade, ${follow.trades} ${follow.trades === 1 ? 'trade' : 'trades'} closed</span></p>
-  <p class="fine">Offshift copies BTC only for now. This replays its copy rule at this trader's own BTC fill prices. It leaves out fees, funding, slippage, your loss limit and the seconds a copy takes, and past results don't predict future ones.</p>` : `<p class="sub">${missing}</p>`}
+  <p class="fine">Replayed at their BTC fills. Leaves out fees, funding, slippage, your loss limit and copy delay.</p>` : `<p class="sub">${missing}</p>`}
 </section>
 ${h && rows.length ? `<section class="panel" aria-labelledby="activity-title">
   <div class="panel__head"><h2 class="section__title" id="activity-title">Activity</h2></div>
   <dl class="cells">
     <div class="cell"><dt class="cell__q">Orders</dt><dd class="cell__a">${stats.trades.toLocaleString('en-US')}</dd><dd class="cell__note">${stats.entries ? `${Math.round((stats.longs / stats.entries) * 100)}% of entries long` : 'No new entries'}</dd></div>
     <div class="cell"><dt class="cell__q">Days active</dt><dd class="cell__a">${stats.days} of 7</dd></div>
-    <div class="cell"><dt class="cell__q">Typical hold</dt><dd class="cell__a">${stats.hold === null ? '–' : span(stats.hold)}</dd><dd class="cell__note">Median, open to close</dd></div>
-    <div class="cell"><dt class="cell__q">Last move</dt><dd class="cell__a">${move ? ago(move) : '–'}</dd>${live ? '<dd><span class="prov prov--live">Live from Somnia Reactivity</span></dd>' : ''}</div>
+    <div class="cell"><dt class="cell__q">Typical hold</dt><dd class="cell__a">${stats.hold === null ? '–' : span(stats.hold)}</dd><dd class="cell__note">Median</dd></div>
+    <div class="cell"><dt class="cell__q">Last move</dt><dd class="cell__a">${move ? ago(move) : '–'}</dd>${live ? '<dd><span class="prov prov--live">Live</span></dd>' : ''}</div>
   </dl>
   <figure class="heat" id="heat" data-at="${esc(JSON.stringify(rows.slice(-5000).map((c) => Number(c.timestamp))))}">
     <figcaption><span id="busy"></span><span class="heat__key" aria-hidden="true">Fewer<i class="lv1"></i><i class="lv2"></i><i class="lv3"></i><i class="lv4"></i>More</span></figcaption>
@@ -912,9 +909,9 @@ ${h && rows.length ? `<section class="panel" aria-labelledby="activity-title">
 </section>
 <section class="panel" aria-labelledby="pairs-title">
   <div class="panel__head"><h2 class="section__title" id="pairs-title">Pairs traded</h2></div>
-  <div class="wrap"><table><thead><tr><th>Pair</th><th class="num opt">${inUsd('Volume')}</th><th class="num opt">Closes</th><th class="num">Win rate</th><th class="num">${inUsd('Realized PnL')}</th></tr></thead><tbody>
-${markets.map((m) => `<tr><td>${tok(pairName(m.pool))}${m.pool === POOL_BTC ? '<small class="tag">Copied by Offshift</small>' : ''}</td><td class="num opt">${volume(m.volume)}</td><td class="num opt">${m.closes}</td><td class="num">${m.closes ? `${Math.round((m.wins / m.closes) * 100)}%` : '–'}</td><td class="num ${tone(raw(m.pnl))}">${usd(raw(m.pnl))}</td></tr>`).join('')}
-</tbody></table></div><p class="fine">Volume is in USDso. A close is one fill, so an order that fills in parts counts several times.${rows.length >= MAX_CHANGES ? ` This account trades too often to read in full, so this page covers its latest ${MAX_CHANGES.toLocaleString('en-US')} position changes.` : ''}</p>
+  <div class="wrap"><table><thead><tr><th>Pair</th><th class="num opt">${inUsd('Volume')}</th><th class="num opt">Closes</th><th class="num opt">Win rate</th><th class="num">${inUsd('Realized PnL')}</th></tr></thead><tbody>
+${markets.map((m) => `<tr><td>${tok(pairName(m.pool))}${m.pool === POOL_BTC ? '<small class="tag">Copied by Offshift</small>' : ''}</td><td class="num opt">${volume(m.volume)}</td><td class="num opt">${m.closes}</td><td class="num opt">${m.closes ? `${Math.round((m.wins / m.closes) * 100)}%` : '–'}</td><td class="num ${tone(raw(m.pnl))}">${usd(raw(m.pnl))}</td></tr>`).join('')}
+</tbody></table></div><p class="fine">Each fill counts as a close.${rows.length >= MAX_CHANGES ? ` Latest ${MAX_CHANGES.toLocaleString('en-US')} position changes only.` : ''}</p>
 </section>
 <section class="panel" aria-labelledby="pnl-title">
   <div class="panel__head"><h2 class="section__title" id="pnl-title">PnL</h2></div>
@@ -922,7 +919,7 @@ ${markets.map((m) => `<tr><td>${tok(pairName(m.pool))}${m.pool === POOL_BTC ? '<
     <div class="trace">${closes.length > 1 ? `${curve(closes.map((c) => raw(c.realizedPnl)), 1000, 240, closes.map((c) => Number(c.timestamp)))}<div class="ends">${time(Number(closes[0].timestamp) * 1000, true)}<span>Realized, all pairs</span>${time(Number(closes.at(-1).timestamp) * 1000, true)}</div>` : '<p class="sub">Not enough closes to draw.</p>'}</div>
     <dl class="sheet sheet--money">${line('Realized', made)}${line('Funding', fundingNet)}${line('Open', openTotal)}${line('Total', net)}</dl>
   </div>
-  <p class="fine">In USDso, before fees. Funding is what they received less what they paid.</p>
+  <p class="fine">USDso, before fees.</p>
 </section>` : ''}
 ${positions.length ? `<section class="panel" aria-labelledby="open-title">
   <div class="panel__head"><h2 class="section__title" id="open-title">Open positions</h2></div>
@@ -934,7 +931,7 @@ ${positions.map((p) => `<tr><td>${side(p.size)} ${quantity(p.size, p.pool)} ${to
   <div class="panel__head"><h2 class="section__title">Recent closes</h2></div>
   ${orders.length ? `<div class="wrap"><table><thead><tr><th class="opt">Closed</th><th>Position</th><th class="num opt">Entry</th><th class="num opt">Exit</th><th class="num">${inUsd('PnL')}</th></tr></thead><tbody>
 ${orders.slice(-20).reverse().map((o) => `<tr><td class="opt">${time(Number(o.at) * 1000, true)}</td><td>${o.long ? 'Long' : 'Short'} ${quantity(o.size, o.pool)} ${tok(pairName(o.pool))}<small class="on-phone dim">${time(Number(o.at) * 1000, true)}</small></td><td class="num opt">${price(o.entry)}</td><td class="num opt">${price(o.exit)}</td><td class="num ${tone(raw(o.pnl))}">${usd(raw(o.pnl))}</td></tr>`).join('')}
-</tbody></table></div><p class="fine">One row per order, before fees and funding.</p>` : `<p class="empty">${h ? 'No closes in the last 7 days.' : missing}</p>`}
+</tbody></table></div><p class="fine">Before fees and funding.</p>` : `<p class="empty">${h ? 'No closes in the last 7 days.' : missing}</p>`}
 </section>`, { script: TRADER_SCRIPT });
 }
 
@@ -1032,6 +1029,6 @@ createServer(async (req, res) => {
   } catch (e) {
     if (req.method === 'POST') return json({ error: e.message }, 400);
     console.log(`${req.url}: ${e.shortMessage ?? e.message}`);
-    html(page('Error · Offshift', `<h1>Something failed</h1><p class="sub">${esc(e.shortMessage ?? e.message)}</p><p class="sub"><a class="quiet" href="/">Back to the traders</a></p>`), 500);
+    html(page('Error · Offshift', `<h1>Something failed</h1><p class="sub">${esc(e.shortMessage ?? e.message)}</p><p class="sub"><a class="quiet" href="/traders">Back to the traders</a></p>`), 500);
   }
 }).listen(PORT, () => console.log(`offshift web on http://localhost:${PORT}`));
